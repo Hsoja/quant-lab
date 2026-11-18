@@ -4,5 +4,7 @@ __pycache__/
 .pytest_cache/
 data/raw/
 salida/
+output/
+.DS_Store
 .venv/
 *.egg-info/
