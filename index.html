@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-REAbf01tcqMVHn0uz9Bwxb5mxJFN78k8Uav5D58BGKQ='; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-XOZZcswid4G1J9QFNP85pm+zUI+91JR0V5/sgSb6bdc='; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <title>SPGI — Reporte Quant Lab</title>
 <style>
@@ -112,6 +112,46 @@
   .badge-info { background: #dbeafe; color: #1e40af; }
   .badge-warn { background: #fef3c7; color: #92400e; }
   .cambios-body { white-space: pre-line; }
+
+  .try-it { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.5rem; }
+  .try-it-warning {
+    background: var(--warn-bg); border-left: 4px solid var(--warn-border); border-radius: 10px;
+    padding: .9rem 1.1rem; font-size: .85rem; margin-bottom: 1.25rem;
+  }
+  .try-it-head { display: flex; align-items: center; gap: .9rem; margin-bottom: 1rem; }
+  .try-it-head h2 { margin: 0; }
+  .bot-avatar {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+    animation: bot-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes bot-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .try-it-label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; }
+  .try-it-select {
+    width: 100%; max-width: 320px; padding: .55rem .7rem; border-radius: 10px;
+    border: 1px solid var(--surface-2); background: #ffffff; color: var(--text); font-size: .95rem;
+  }
+  .try-it-select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .try-it-result { margin-top: 1.25rem; min-height: 1px; }
+  .try-it-result-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .try-it-result-head h3 { margin: 0; font-size: 1rem; }
+  .try-it-price { font-size: .95rem; margin: .5rem 0; }
+  .try-it-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem; margin-top: .75rem; }
+  .try-it-figure {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    background: #ffffff; border: 1px solid var(--surface-2); border-radius: 10px; padding: .5rem .7rem; font-size: .82rem;
+  }
+  .try-it-figure-label { color: var(--muted); }
+  .try-it-figure-value { font-weight: 700; }
+  .thinking { color: var(--muted); }
+  .thinking::after { content: ""; animation: thinking-dots 1.2s steps(4, end) infinite; }
+  @keyframes thinking-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+  @media (prefers-reduced-motion: reduce) {
+    .bot-avatar { animation: none; }
+    .thinking::after { animation: none; content: "..."; }
+  }
+
   footer {
     text-align: center; color: var(--muted); font-size: .85rem;
     padding: 1.5rem; border-top: 1px solid var(--surface-2);
@@ -143,7 +183,7 @@
         <span class="pill">🚫 Nunca "compra" ni "vende"</span>
       </div>
       <h1>SPGI</h1>
-      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:44 UTC</p>
+      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 14:01 UTC</p>
       <a class="hero-cta" href="#como-funciona">¿Cómo sé que esto es confiable? ↓</a>
     </div>
   </header>
@@ -314,6 +354,29 @@
     </section>
     
     
+    <section class="try-it reveal" aria-labelledby="try-it-title">
+      <p class="try-it-warning">
+        <strong>⚠️ Esto es una prueba (experimental).</strong> La lectura de "barata" o "cara" es
+        automática y simple (P/E y FCF yield con dos umbrales fijos) — no es la metodología
+        completa de un manual de inversión, no compara contra el sector ni revisa señales de
+        alerta, y de ninguna manera es asesoría financiera. No tomes ninguna decisión basada en
+        esto.
+      </p>
+      <div class="try-it-head">
+        <span class="bot-avatar" aria-hidden="true">🤖</span>
+        <div>
+          <h2 id="try-it-title">Pruébalo con una acción</h2>
+          <p class="section-intro">Elige una empresa ya verificada y mira el mismo pipeline correr sobre sus cifras.</p>
+        </div>
+      </div>
+      <label class="try-it-label" for="company-select">Empresa</label>
+      <select id="company-select" class="try-it-select">
+        <option value="">— elige una empresa —</option>
+      </select>
+      <div id="try-it-result" class="try-it-result" aria-live="polite"></div>
+    </section>
+    <div id="companies-data" hidden data-json="{&quot;SPGI&quot;:{&quot;ticker&quot;:&quot;SPGI&quot;,&quot;filing_doc_id&quot;:&quot;CIK0000064040-0000064040-26-000013&quot;,&quot;report_date&quot;:&quot;2025-12-31&quot;,&quot;figures&quot;:{&quot;revenue&quot;:{&quot;label&quot;:&quot;Ingresos (2025-12-31)&quot;,&quot;value&quot;:15336000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000064040-0000064040-26-000013&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;ts of Income                                            (in millions, except per share data)  Year Ended December 31,       2025    2024    2023    Revenue  $  15,336&quot;}},&quot;operating_income&quot;:{&quot;label&quot;:&quot;Utilidad operativa&quot;,&quot;value&quot;:6478000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000064040-0000064040-26-000013&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;n dispositions, net   ( 273 )      ( 59 )      70       Equity in income on unconsolidated subsidiaries   ( 28 )      ( 43 )      ( 36 )      Operating profit  6,478&quot;}},&quot;ebitda&quot;:{&quot;label&quot;:&quot;EBITDA (derivado)&quot;,&quot;value&quot;:7657000000.0,&quot;derivado&quot;:true,&quot;no_verificado&quot;:false,&quot;nota&quot;:&quot;EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).&quot;,&quot;citation&quot;:null},&quot;net_income&quot;:{&quot;label&quot;:&quot;Utilidad neta&quot;,&quot;value&quot;:4471000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000064040-0000064040-26-000013&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;Less: net income attributable to noncontrolling interests   ( 349 )      ( 315 )      ( 267 )                    Net income attributable to S&amp;P Global Inc.  $  4,471&quot;}},&quot;capex&quot;:{&quot;label&quot;:&quot;CAPEX (compra de propiedad, planta y equipo)&quot;,&quot;value&quot;:195000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000064040-0000064040-26-000013&quot;,&quot;seccion&quot;:&quot;Estado de flujo de efectivo / nota de propiedad, planta y equipo&quot;,&quot;frase_exacta&quot;:&quot;1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179       $  1,173       $  1,143       $  195&quot;}},&quot;working_capital_change&quot;:{&quot;label&quot;:&quot;Variación de capital de trabajo&quot;,&quot;value&quot;:null,&quot;derivado&quot;:false,&quot;no_verificado&quot;:true,&quot;nota&quot;:&quot;Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.&quot;,&quot;citation&quot;:null}},&quot;fcf&quot;:{&quot;value&quot;:null,&quot;nota&quot;:&quot;FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.&quot;},&quot;cagr&quot;:{&quot;value&quot;:0.10770153950216987,&quot;nota&quot;:&quot;CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años).&quot;},&quot;valuation&quot;:{&quot;price&quot;:452.35,&quot;price_as_of&quot;:&quot;2026-11-17&quot;,&quot;price_citation&quot;:{&quot;doc_id&quot;:&quot;YAHOO-CHART:SPGI&quot;,&quot;seccion&quot;:&quot;Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)&quot;,&quot;frase_exacta&quot;:&quot;\&quot;regularMarketPrice\&quot;:452.35&quot;},&quot;pe&quot;:30.86825877879669,&quot;fcf_yield&quot;:null,&quot;market_cap&quot;:138011985000.0,&quot;veredicto&quot;:&quot;cara&quot;,&quot;nota&quot;:&quot;Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir.&quot;}},&quot;COST&quot;:{&quot;ticker&quot;:&quot;COST&quot;,&quot;filing_doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;report_date&quot;:&quot;2026-08-30&quot;,&quot;figures&quot;:{&quot;revenue&quot;:{&quot;label&quot;:&quot;Ingresos (2026-08-30)&quot;,&quot;value&quot;:303154000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;2024    REVENUE              Net sales  $  297,247       $  269,912       $  249,625       Membership fees  5,907       5,323       4,828       Total revenue  303,154&quot;}},&quot;operating_income&quot;:{&quot;label&quot;:&quot;Utilidad operativa&quot;,&quot;value&quot;:11685000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;Merchandise costs  264,279       239,886       222,358       Selling, general and administrative  27,190       24,966       22,810       Operating income  11,685&quot;}},&quot;ebitda&quot;:{&quot;label&quot;:&quot;EBITDA (derivado)&quot;,&quot;value&quot;:14359000000.0,&quot;derivado&quot;:true,&quot;no_verificado&quot;:false,&quot;nota&quot;:&quot;EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).&quot;,&quot;citation&quot;:null},&quot;net_income&quot;:{&quot;label&quot;:&quot;Utilidad neta&quot;,&quot;value&quot;:9226000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;INCOME TAXES  12,251       10,818       9,740       Provision for income taxes  3,025       2,719       2,373                                   NET INCOME  $  9,226&quot;}},&quot;capex&quot;:{&quot;label&quot;:&quot;CAPEX (compra de propiedad, planta y equipo)&quot;,&quot;value&quot;:6435000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;seccion&quot;:&quot;Estado de flujo de efectivo / nota de propiedad, planta y equipo&quot;,&quot;frase_exacta&quot;:&quot;rovided by operating activities  15,817       13,335       11,339       CASH FLOWS FROM INVESTING ACTIVITIES              Additions to property and equipment  ( 6,435&quot;}},&quot;working_capital_change&quot;:{&quot;label&quot;:&quot;Variación de capital de trabajo&quot;,&quot;value&quot;:-718000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000909832-0000909832-26-000093&quot;,&quot;seccion&quot;:&quot;Estado de flujo de efectivo&quot;,&quot;frase_exacta&quot;:&quot;rchandise inventories  ( 1,153 )      559       ( 2,068 )      Accounts payable  2,755       404       1,938       Other operating assets and liabilities, net  718&quot;}}},&quot;fcf&quot;:{&quot;value&quot;:5617000000.0,&quot;nota&quot;:&quot;FCF = EBITDA (derivado) − impuestos (devengado) − CAPEX − ΔWK.&quot;},&quot;cagr&quot;:{&quot;value&quot;:0.09183862498726847,&quot;nota&quot;:&quot;CAGR de ingresos entre 2024-09-01 y 2026-08-30 (1.99 años).&quot;},&quot;valuation&quot;:{&quot;price&quot;:1110.08,&quot;price_as_of&quot;:&quot;2026-11-17&quot;,&quot;price_citation&quot;:{&quot;doc_id&quot;:&quot;YAHOO-CHART:COST&quot;,&quot;seccion&quot;:&quot;Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)&quot;,&quot;frase_exacta&quot;:&quot;\&quot;regularMarketPrice\&quot;:1110.08&quot;},&quot;pe&quot;:53.47382659440711,&quot;fcf_yield&quot;:0.011385437149379576,&quot;market_cap&quot;:493349524159.99994,&quot;veredicto&quot;:&quot;cara&quot;,&quot;nota&quot;:&quot;Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir.&quot;}},&quot;AAPL&quot;:{&quot;ticker&quot;:&quot;AAPL&quot;,&quot;filing_doc_id&quot;:&quot;CIK0000320193-0000320193-26-000026&quot;,&quot;report_date&quot;:&quot;2026-09-26&quot;,&quot;figures&quot;:{&quot;revenue&quot;:{&quot;label&quot;:&quot;Ingresos (2026-09-26)&quot;,&quot;value&quot;:478834000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000320193-0000320193-26-000026&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;4    Net sales:               Products  $  355,533       $  307,003       $  294,866        Services  123,301       109,158       96,169       Total net sales  478,834&quot;}},&quot;operating_income&quot;:{&quot;label&quot;:&quot;Utilidad operativa&quot;,&quot;value&quot;:158063000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000320193-0000320193-26-000026&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;ral and administrative  29,774       27,601       26,097       Total operating expenses  75,539       62,151       57,467                     Operating income  158,063&quot;}},&quot;ebitda&quot;:{&quot;label&quot;:&quot;EBITDA (derivado)&quot;,&quot;value&quot;:171486000000.0,&quot;derivado&quot;:true,&quot;no_verificado&quot;:false,&quot;nota&quot;:&quot;EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).&quot;,&quot;citation&quot;:null},&quot;net_income&quot;:{&quot;label&quot;:&quot;Utilidad neta&quot;,&quot;value&quot;:132175000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000320193-0000320193-26-000026&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;before provision for income taxes  159,237       132,729       123,485       Provision for income taxes  27,062       20,719       29,749       Net income  $  132,175&quot;}},&quot;capex&quot;:{&quot;label&quot;:&quot;CAPEX (compra de propiedad, planta y equipo)&quot;,&quot;value&quot;:9041000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0000320193-0000320193-26-000026&quot;,&quot;seccion&quot;:&quot;Estado de flujo de efectivo / nota de propiedad, planta y equipo&quot;,&quot;frase_exacta&quot;:&quot;51,211       Proceeds from sales of marketable securities  14,280       12,890       11,135       Payments for acquisition of property, plant and equipment  ( 9,041&quot;}},&quot;working_capital_change&quot;:{&quot;label&quot;:&quot;Variación de capital de trabajo&quot;,&quot;value&quot;:null,&quot;derivado&quot;:false,&quot;no_verificado&quot;:true,&quot;nota&quot;:&quot;Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.&quot;,&quot;citation&quot;:null}},&quot;fcf&quot;:{&quot;value&quot;:null,&quot;nota&quot;:&quot;FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.&quot;},&quot;cagr&quot;:{&quot;value&quot;:0.10696966768323302,&quot;nota&quot;:&quot;CAGR de ingresos entre 2024-09-28 y 2026-09-26 (1.99 años).&quot;},&quot;valuation&quot;:{&quot;price&quot;:351.91,&quot;price_as_of&quot;:&quot;2026-11-17&quot;,&quot;price_citation&quot;:{&quot;doc_id&quot;:&quot;YAHOO-CHART:AAPL&quot;,&quot;seccion&quot;:&quot;Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)&quot;,&quot;frase_exacta&quot;:&quot;\&quot;regularMarketPrice\&quot;:351.91&quot;},&quot;pe&quot;:39.192153466691884,&quot;fcf_yield&quot;:null,&quot;market_cap&quot;:5180222884460.0,&quot;veredicto&quot;:&quot;cara&quot;,&quot;nota&quot;:&quot;Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir.&quot;}},&quot;UBER&quot;:{&quot;ticker&quot;:&quot;UBER&quot;,&quot;filing_doc_id&quot;:&quot;CIK0001543151-0001543151-26-000015&quot;,&quot;report_date&quot;:&quot;2025-12-31&quot;,&quot;figures&quot;:{&quot;revenue&quot;:{&quot;label&quot;:&quot;Ingresos (2025-12-31)&quot;,&quot;value&quot;:52017000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0001543151-0001543151-26-000015&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;amounts)                                                   Year Ended December 31,        2023    2024    2025    Revenue    $  37,281       $  43,978       $  52,017&quot;}},&quot;operating_income&quot;:{&quot;label&quot;:&quot;Utilidad operativa&quot;,&quot;value&quot;:5565000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0001543151-0001543151-26-000015&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;rtization    823       711       719       Total costs and expenses    36,171       41,179       46,452       Income from operations    1,110       2,799       5,565&quot;}},&quot;ebitda&quot;:{&quot;label&quot;:&quot;EBITDA (derivado)&quot;,&quot;value&quot;:6284000000.0,&quot;derivado&quot;:true,&quot;no_verificado&quot;:false,&quot;nota&quot;:&quot;EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).&quot;,&quot;citation&quot;:null},&quot;net_income&quot;:{&quot;label&quot;:&quot;Utilidad neta&quot;,&quot;value&quot;:10053000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0001543151-0001543151-26-000015&quot;,&quot;seccion&quot;:&quot;Estado de resultados&quot;,&quot;frase_exacta&quot;:&quot;non-controlling interests, net of tax    269       ( 11 )      40       Net income attributable to Uber Technologies, Inc.    $  1,887       $  9,856       $  10,053&quot;}},&quot;capex&quot;:{&quot;label&quot;:&quot;CAPEX (compra de propiedad, planta y equipo)&quot;,&quot;value&quot;:336000000.0,&quot;derivado&quot;:false,&quot;no_verificado&quot;:false,&quot;nota&quot;:null,&quot;citation&quot;:{&quot;doc_id&quot;:&quot;CIK0001543151-0001543151-26-000015&quot;,&quot;seccion&quot;:&quot;Estado de flujo de efectivo / nota de propiedad, planta y equipo&quot;,&quot;frase_exacta&quot;:&quot;s    3,585       7,137       10,099       Cash flows from investing activities                Purchases of property and equipment    ( 223 )      ( 242 )      ( 336&quot;}},&quot;working_capital_change&quot;:{&quot;label&quot;:&quot;Variación de capital de trabajo&quot;,&quot;value&quot;:null,&quot;derivado&quot;:false,&quot;no_verificado&quot;:true,&quot;nota&quot;:&quot;Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.&quot;,&quot;citation&quot;:null}},&quot;fcf&quot;:{&quot;value&quot;:null,&quot;nota&quot;:&quot;FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.&quot;},&quot;cagr&quot;:{&quot;value&quot;:0.181080234419132,&quot;nota&quot;:&quot;CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años).&quot;},&quot;valuation&quot;:{&quot;price&quot;:68.81,&quot;price_as_of&quot;:&quot;2026-11-17&quot;,&quot;price_citation&quot;:{&quot;doc_id&quot;:&quot;YAHOO-CHART:UBER&quot;,&quot;seccion&quot;:&quot;Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)&quot;,&quot;frase_exacta&quot;:&quot;\&quot;regularMarketPrice\&quot;:68.81&quot;},&quot;pe&quot;:14.508683983885408,&quot;fcf_yield&quot;:null,&quot;market_cap&quot;:145855800090.0,&quot;veredicto&quot;:&quot;barata&quot;,&quot;nota&quot;:&quot;Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir.&quot;}}}"></div>
+    
     <section class="trust" aria-labelledby="trust-title">
       <h2 id="trust-title">🤝 Por qué puedes confiar en esta página</h2>
       <div class="trust-grid">
@@ -388,6 +451,131 @@
     }
     window.requestAnimationFrame(step);
   }
+
+  // --- "Pruébalo con una acción" (experimental): todo con datos ya
+  // embebidos en la página (data-json), nunca una llamada de red desde el
+  // navegador. Construido solo con createElement y textContent.
+  (function () {
+    var dataEl = document.getElementById("companies-data");
+    var select = document.getElementById("company-select");
+    var resultEl = document.getElementById("try-it-result");
+    if (!dataEl || !select || !resultEl) return;
+
+    var companies = {};
+    try {
+      companies = JSON.parse(dataEl.getAttribute("data-json") || "{}");
+    } catch (e) {
+      companies = {};
+    }
+
+    Object.keys(companies).sort().forEach(function (ticker) {
+      var opt = document.createElement("option");
+      opt.value = ticker;
+      opt.textContent = ticker;
+      select.appendChild(opt);
+    });
+
+    function clear(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function money(value) {
+      if (value === null || value === undefined) return "no verificado";
+      return "US$ " + Math.round(value).toLocaleString("en-US");
+    }
+
+    function pct(value) {
+      if (value === null || value === undefined) return "no verificado";
+      return (value * 100).toFixed(2) + "%";
+    }
+
+    function badge(text, kind) {
+      var span = document.createElement("span");
+      span.className = "badge badge-" + kind;
+      span.textContent = text;
+      return span;
+    }
+
+    function figureRow(figure) {
+      var row = document.createElement("div");
+      row.className = "try-it-figure";
+      var label = document.createElement("span");
+      label.className = "try-it-figure-label";
+      label.textContent = figure.label;
+      var value = document.createElement("span");
+      value.className = "try-it-figure-value";
+      value.textContent = money(figure.value);
+      row.appendChild(label);
+      row.appendChild(value);
+      if (figure.no_verificado) row.appendChild(badge("no verificado", "warn"));
+      else if (figure.derivado) row.appendChild(badge("derivado", "info"));
+      else row.appendChild(badge("citado", "ok"));
+      return row;
+    }
+
+    function badgeKindForVerdict(verdict) {
+      if (verdict === "barata") return "ok";
+      if (verdict === "cara") return "warn";
+      if (verdict === "neutral") return "info";
+      return "warn"; // "no verificado"
+    }
+
+    function renderResult(ticker) {
+      var company = companies[ticker];
+      clear(resultEl);
+      if (!company) return;
+
+      var thinking = document.createElement("p");
+      thinking.className = "thinking";
+      thinking.textContent = "🤖 Analizando " + ticker + "…";
+      resultEl.appendChild(thinking);
+
+      window.setTimeout(
+        function () {
+          clear(resultEl);
+          var valuation = company.valuation;
+
+          var head = document.createElement("div");
+          head.className = "try-it-result-head";
+          var title = document.createElement("h3");
+          title.textContent = ticker + " — " + company.filing_doc_id;
+          head.appendChild(title);
+          head.appendChild(badge(valuation.veredicto, badgeKindForVerdict(valuation.veredicto)));
+          resultEl.appendChild(head);
+
+          var priceP = document.createElement("p");
+          priceP.className = "try-it-price";
+          if (valuation.price !== null) {
+            priceP.textContent =
+              "Precio (" + valuation.price_as_of + "): US$ " + valuation.price.toFixed(2) +
+              " · P/E: " + (valuation.pe !== null ? valuation.pe.toFixed(1) : "no verificado") +
+              " · FCF yield: " + pct(valuation.fcf_yield);
+          } else {
+            priceP.textContent = "Precio no disponible (no verificado).";
+          }
+          resultEl.appendChild(priceP);
+
+          var notaP = document.createElement("p");
+          notaP.className = "card-note";
+          notaP.textContent = valuation.nota;
+          resultEl.appendChild(notaP);
+
+          var figuresWrap = document.createElement("div");
+          figuresWrap.className = "try-it-figures";
+          Object.keys(company.figures).forEach(function (key) {
+            figuresWrap.appendChild(figureRow(company.figures[key]));
+          });
+          resultEl.appendChild(figuresWrap);
+        },
+        prefersReduced ? 0 : 650
+      );
+    }
+
+    select.addEventListener("change", function () {
+      if (select.value) renderResult(select.value);
+      else clear(resultEl);
+    });
+  })();
 
   var items = document.querySelectorAll(".reveal");
   if (prefersReduced || !("IntersectionObserver" in window)) {
