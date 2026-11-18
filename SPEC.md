@@ -1,0 +1,180 @@
+# SPEC — Quant Lab MVP
+
+Monitor de reportes financieros oficiales con citas verificables. Lee un reporte, extrae cifras
+estructuradas, las calcula por código y cita cada afirmación contra el documento guardado.
+Este documento manda sobre el código: toda decisión de cálculo vive aquí, no en el LLM.
+
+**No es asesoría financiera.** Es una herramienta de investigación: muestra tesis, riesgo y qué la
+invalidaría, nunca una señal de compra o venta.
+
+Este proyecto es genérico y reusable: funciona para cualquier empresa no financiera que reporte
+ante la SEC. Los ejemplos de este documento usan una **empresa de ejemplo** elegida solo porque
+tiene un 10-K simple de leer (márgenes altos, poco CAPEX). El código no asume ninguna empresa fija.
+
+## 1. Alcance del MVP
+
+- Una empresa de ejemplo, un tipo de reporte (10-K anual), citas verificadas.
+- Descargar y guardar el documento original con su hash.
+- Extraer por código: EBITDA (derivado), impuestos, CAPEX y variación de capital de trabajo — cada
+  cifra con su cita.
+- Calcular FCF y CAGR de ingresos.
+- Resumen de cambios contra el reporte anterior, con citas.
+- Verificador automático (construido **antes** del resumen con LLM) y reporte final en Markdown.
+
+Fuera del MVP (fases futuras): SEDAR+, FRED, Banco de Canadá, DCF, backtester, panel macro, diario
+de decisiones, interfaz web.
+
+## 2. Reglas no negociables
+
+1. Cada cifra lleva fuente: documento, sección y fecha. Sin fuente → **"no verificado"**.
+2. Los números los calcula el código (datos estructurados), nunca el LLM. El LLM solo explica.
+3. Cada afirmación del LLM sale con una cita estructurada `{doc_id, sección, frase_exacta, hash}`.
+   El verificador busca la frase literal en el documento guardado; si no está, se descarta.
+4. Nunca "compra" ni "vende". Se muestra tesis, riesgo y qué la invalidaría.
+5. Siempre el argumento en contra y las señales de alerta del método.
+6. El riesgo se muestra primero.
+7. Sin probabilidades salvo backtesting fuera de muestra validado, y sin fuga de datos.
+8. Pie en todo reporte: «Análisis informativo, no asesoría financiera.»
+9. El MVP evita bancos: EBITDA y EV/EBITDA no les aplican con sentido.
+
+## 3. Fuente y formato del documento
+
+- **Fuente:** SEC EDGAR, 10-K anual.
+- **Formato:** el HTML del 10-K con **iXBRL en línea** (inline XBRL: tags `ix:nonFraction` /
+  `ix:nonNumeric` incrustados en el texto real del documento), no el XBRL "puro" separado.
+  Así cada cifra apunta a su lugar exacto en el documento y la **frase exacta de la cita sale
+  literalmente de ese HTML**, nunca de una API de resumen.
+- La API `data.sec.gov/api/xbrl/companyconcept` se usa solo como **ayuda interna** para saber qué
+  tag XBRL (`us-gaap:...`) y qué periodo buscar dentro del HTML — nunca como fuente de la cita.
+- **SEDAR+:** no verificado hasta probar que existe un acceso programático real. No se promete.
+
+### Acceso a EDGAR (confirmado 2026-11-17)
+
+- Mapeo ticker → CIK: `https://www.sec.gov/files/company_tickers.json`.
+- Lista de filings: `https://data.sec.gov/submissions/CIK{cik10}.json` (campo `filings.recent`,
+  filtrar `form == "10-K"`).
+- Documento: `https://www.sec.gov/Archives/edgar/data/{cik}/{accession_sin_guiones}/{primaryDocument}`.
+- **Obligatorio:** header `User-Agent` con un contacto identificable (`EDGAR_CONTACT` en `.env`,
+  nunca hardcodeado ni con datos personales de Katherine). SEC no verifica el correo, pero exige
+  el formato.
+- **Límite de tasa:** SEC pide no pasar de ~10 solicitudes/segundo. El ingestor usa **1 solicitud
+  por segundo** (conservador) y reintenta con backoff si responde 429 o 5xx.
+- Probado en vivo el 17 nov 2026 con la empresa de ejemplo: CIK, lista de 10-K y descarga del
+  documento HTML con iXBRL funcionaron; hash SHA-256 calculado sobre 4,097,675 bytes.
+
+## 4. Decisiones de cálculo (fijas para el MVP)
+
+### 4.1 EBITDA — derivado, no una etiqueta XBRL
+
+El EBITDA **no existe como tag XBRL estándar**. Se calcula por código:
+
+```
+EBITDA (derivado) = Utilidad operativa (us-gaap:OperatingIncomeLoss)
+                   + Depreciación y amortización (us-gaap:DepreciationDepletionAndAmortization,
+                     o el tag equivalente que la empresa reporte en su estado de flujo de efectivo)
+```
+
+- Cada componente se cita por separado (su propia frase exacta en el documento).
+- El resultado de la suma se marca explícitamente **"(derivado)"** en el reporte: no es una frase
+  del documento, es un cálculo nuestro sobre dos cifras citadas.
+- **No se usa** el "EBITDA ajustado" (non-GAAP) que la empresa narra en su discusión y análisis:
+  esa cifra excluye partidas a discreción de la empresa y no es comparable ni verificable con la
+  misma vara entre reportes.
+
+### 4.2 Impuestos
+
+Se usa el **gasto por impuestos del estado de resultados** (`us-gaap:IncomeTaxExpenseBenefit`),
+base devengado (no caja). Es la cifra consistente con un FCF simplificado que parte de EBITDA
+(utilidad operativa), que también es base devengado.
+
+- El **impuesto pagado en efectivo** (`us-gaap:IncomeTaxesPaidNet`, revelado en notas de flujo de
+  efectivo) se muestra aparte, **solo como referencia**, con su propia cita. No entra en la
+  fórmula del FCF del MVP. Se documenta la diferencia en el reporte cuando sea grande.
+
+### 4.3 CAPEX
+
+Se usa **pagos por compra de propiedad, planta y equipo**
+(`us-gaap:PaymentsToAcquirePropertyPlantAndEquipment`) del estado de flujo de efectivo.
+
+- No incluye intangibles capitalizados (ej. software interno) ni adquisiciones de negocios: quedan
+  fuera del alcance del MVP. Esto es una **simplificación documentada**, no un "no verificado" —
+  la cifra que se usa sí tiene cita completa, solo que el alcance de "inversión" es más angosto que
+  el CAPEX total económico de la empresa.
+
+### 4.4 Variación de capital de trabajo (ΔWK)
+
+No hay un tag único universal. Regla de decisión, en este orden:
+
+1. Si el estado de flujo de efectivo reporta una **línea agregada** (ej. "cambios netos en activos
+   y pasivos operativos"), se usa esa cifra con su cita directa.
+2. Si no existe una línea agregada, se **suman** las líneas individuales de capital de trabajo del
+   estado de flujo de efectivo (cuentas por cobrar, cuentas por pagar, ingresos diferidos, inventario,
+   etc.), cada una citada por separado, y el total se marca **"(derivado)"**.
+3. Si ni (1) ni (2) se pueden extraer con una cita completa, la variación de capital de trabajo
+   sale como **"no verificado"** — nunca se inventa ni se aproxima con otra cifra.
+
+### 4.5 FCF (Flujo de Caja Libre, versión simplificada del MVP)
+
+```
+FCF = EBITDA (derivado) − Impuestos (gasto, devengado) − CAPEX − ΔWK
+```
+
+Es la fórmula de las siglas de análisis financiero (FCFF simplificado, sin ajuste de intereses).
+No es un FCFF/FCFE completo. Se documenta como aproximación en el reporte final.
+
+### 4.6 CAGR de ingresos
+
+```
+CAGR = (Ingreso_final / Ingreso_inicial) ^ (1 / años) − 1
+```
+
+Usa `us-gaap:Revenues` o `us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax` (el que la
+empresa reporte) del 10-K actual y de uno anterior. El MVP compara **2 reportes**; más años de
+historia quedan para una fase posterior.
+
+## 5. Formato de la cita estructurada
+
+```json
+{
+  "doc_id": "CIK0000064040-ACCESSION",
+  "seccion": "Estado consolidado de resultados",
+  "frase_exacta": "texto literal copiado del HTML iXBRL",
+  "hash": "sha256 del documento HTML guardado"
+}
+```
+
+- `frase_exacta` se extrae del HTML con iXBRL en línea descargado y guardado localmente — nunca de
+  un resumen, nunca de la API de `companyconcept`.
+- El verificador (`verify/`) vuelve a abrir el documento guardado por su `hash` y confirma que
+  `frase_exacta` existe ahí, literal. Si no existe, la afirmación se descarta y se marca
+  **"no verificado"**.
+
+## 6. Orden de fases (MVP)
+
+0. SPEC.md + esqueleto del repo con pruebas (hoy).
+1. `ingest/` — descarga y hash del documento.
+2. `extract/` — EBITDA, impuestos, CAPEX, ΔWK, cada uno con cita.
+3. `calc/` — FCF y CAGR.
+4. `verify/` — verificador de citas, **antes** del resumen con LLM (orden invertido a propósito:
+   el verificador no depende del LLM y así cualquier cita, venga de donde venga, pasa por el mismo
+   filtro).
+5. `llm/` — resumen de cambios con citas estructuradas. El texto del documento y del usuario se
+   pasan en su propio rol, nunca concatenados al prompt del sistema (riesgo de inyección: el 10-K
+   es un documento no confiable).
+6. `report/` — Markdown final: riesgo arriba, cifras con fuente, pie de no asesoría.
+7. Auditoría de seguridad, skill reusable, publicación del repo.
+
+## 7. Seguridad (resumen; detalle en `docs/SECURITY.md`)
+
+- Llaves y `EDGAR_CONTACT` solo en `.env` (gitignored, permisos 0600); `.env.example` sin valores
+  reales.
+- Nada personal en el repo: ni portafolios, ni correos, ni montos de nadie. Solo datos públicos de
+  la empresa de ejemplo.
+- Sin `eval`, `exec` ni `subprocess(shell=True)`.
+- Tope de tokens y de salida en cualquier llamada al LLM.
+
+## 8. Historial
+
+- 2026-11-17 — v1. Creado para el bloque de arranque. Empresa de ejemplo y fuente elegidas,
+  acceso a EDGAR probado en vivo, decisiones de cálculo de EBITDA/impuestos/CAPEX/ΔWK fijadas,
+  fases 4 y 5 invertidas (verificador antes del resumen LLM).
