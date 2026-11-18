@@ -40,6 +40,15 @@ class CitedValue:
 
     @property
     def no_verificado(self) -> bool:
+        """True si no hay con qué confiar en este número.
+
+        Un valor "derivado" (ej. EBITDA) nunca tiene cita propia a propósito
+        — se apoya en sus componentes, que ya están citados por separado —
+        así que solo cuenta como "no verificado" si ni siquiera se pudo
+        calcular (value is None). Para el resto, falta la cita SÍ importa.
+        """
+        if self.derivado:
+            return self.value is None
         return self.value is None or self.citation is None
 
 
