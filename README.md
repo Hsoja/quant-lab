@@ -55,8 +55,22 @@ text, only the JSON of already-verified figures (see `docs/SECURITY.md`).
 `report/html_report.py` generates a single self-contained HTML file (white and light blue) from
 the same data as the Markdown report. It's static on purpose: no backend, no forms, no
 `localStorage`, no external scripts or fonts. All dynamic text goes through `html.escape` before
-being inserted, and it ships a strict Content-Security-Policy (`default-src 'none'`). Animations
-respect `prefers-reduced-motion`.
+being inserted, and it ships a strict Content-Security-Policy (`default-src 'none'`; the inline
+`<script>` is allowed by a SHA-256 hash of its exact content, not `'unsafe-inline'`). Reveal
+content is visible by default and only pre-hides once the script confirms it started, so a future
+script failure for any reason can't blank the page again. Animations respect
+`prefers-reduced-motion`.
+
+### "Try it with a stock" (experimental)
+
+A small interactive section lets you pick among a handful of pre-computed example companies and
+see a simple, mechanical "cheap / expensive / neutral" read (P/E and FCF yield against two fixed
+thresholds) — clearly marked as a test, never investment advice. It stays static: no ticker is
+fetched live from the browser. `scripts/precompute_examples.py` runs the full pipeline plus a
+price lookup (`ingest/price.py`, an unofficial Yahoo Finance endpoint — SEC EDGAR has no market
+prices) for a short list of tickers and writes `examples/companies.json`, which the page embeds
+as a `data-json` HTML attribute (never inside a `<script>` tag) and reads client-side. See
+SPEC.md section 9 for the full decisions and limitations.
 
 ## Running tests
 

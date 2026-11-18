@@ -70,7 +70,16 @@ _SIMPLE_CONCEPTS = {
         "Impuestos pagados en efectivo (solo referencia)",
         "Notas al estado de flujo de efectivo",
     ),
+    "net_income": ("NetIncomeLoss", "Utilidad neta", "Estado de resultados"),
 }
+
+# No toda empresa etiqueta las acciones diluidas igual; se prueban en orden.
+_SHARES_CANDIDATES = (
+    "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "WeightedAverageNumberOfSharesOutstandingBasic",
+)
+_SHARES_LABEL = "Acciones en circulación (promedio ponderado)"
+_SHARES_SECCION = "Estado de resultados (ganancia por acción)"
 
 # No toda empresa etiqueta CAPEX igual; se prueban en este orden (SPEC.md 4.3).
 _CAPEX_CANDIDATES = (
@@ -296,6 +305,45 @@ def extract_core_facts(
         results["ebitda"] = CitedValue(
             concept="ebitda", label="EBITDA (derivado)", value=None, citation=None, derivado=True,
             nota="No se puede derivar EBITDA: falta utilidad operativa o D&A citadas.",
+        )
+
+    # Acciones diluidas: se prueban candidatos en orden, igual que CAPEX/ΔWK.
+    shares_value = None
+    shares_local_name = None
+    for local_name in _SHARES_CANDIDATES:
+        value = company_concept_fy_value(cik, local_name, filing)
+        if value is not None:
+            shares_value, shares_local_name = value, local_name
+            break
+    if shares_local_name is not None:
+        results["diluted_shares"] = _cite_value(
+            concept_key="diluted_shares", local_name=shares_local_name, label=_SHARES_LABEL,
+            seccion=_SHARES_SECCION, filing=filing, full_text=full_text, facts=facts,
+            doc_hash=doc_hash, target_value=shares_value, period_end=filing.report_date,
+        )
+    else:
+        results["diluted_shares"] = CitedValue(
+            concept="diluted_shares", label=_SHARES_LABEL, value=None, citation=None,
+            nota=(
+                "Ninguno de los tags de acciones candidatos (" + ", ".join(_SHARES_CANDIDATES)
+                + ") aparece en este filing (no verificado)."
+            ),
+        )
+
+    # EPS (derivado): utilidad neta / acciones diluidas. Se usa para el P/E
+    # del apartado de valoración experimental (ver calc/valuation.py).
+    net_income = results["net_income"]
+    diluted_shares = results["diluted_shares"]
+    if net_income.value is not None and diluted_shares.value not in (None, 0):
+        results["eps"] = CitedValue(
+            concept="eps", label="Utilidad por acción (derivado)",
+            value=net_income.value / diluted_shares.value, citation=None, derivado=True,
+            nota="EPS = utilidad neta / acciones diluidas.",
+        )
+    else:
+        results["eps"] = CitedValue(
+            concept="eps", label="Utilidad por acción (derivado)", value=None, citation=None,
+            derivado=True, nota="No se puede derivar EPS: falta utilidad neta o acciones diluidas citadas.",
         )
 
     return results

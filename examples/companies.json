@@ -1,0 +1,378 @@
+{
+  "SPGI": {
+    "ticker": "SPGI",
+    "filing_doc_id": "CIK0000064040-0000064040-26-000013",
+    "report_date": "2025-12-31",
+    "figures": {
+      "revenue": {
+        "label": "Ingresos (2025-12-31)",
+        "value": 15336000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000064040-0000064040-26-000013",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "ts of Income                                            (in millions, except per share data)  Year Ended December 31,       2025    2024    2023    Revenue  $  15,336"
+        }
+      },
+      "operating_income": {
+        "label": "Utilidad operativa",
+        "value": 6478000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000064040-0000064040-26-000013",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "n dispositions, net   ( 273 )      ( 59 )      70       Equity in income on unconsolidated subsidiaries   ( 28 )      ( 43 )      ( 36 )      Operating profit  6,478"
+        }
+      },
+      "ebitda": {
+        "label": "EBITDA (derivado)",
+        "value": 7657000000.0,
+        "derivado": true,
+        "no_verificado": false,
+        "nota": "EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).",
+        "citation": null
+      },
+      "net_income": {
+        "label": "Utilidad neta",
+        "value": 4471000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000064040-0000064040-26-000013",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "Less: net income attributable to noncontrolling interests   ( 349 )      ( 315 )      ( 267 )                    Net income attributable to S&P Global Inc.  $  4,471"
+        }
+      },
+      "capex": {
+        "label": "CAPEX (compra de propiedad, planta y equipo)",
+        "value": 195000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000064040-0000064040-26-000013",
+          "seccion": "Estado de flujo de efectivo / nota de propiedad, planta y equipo",
+          "frase_exacta": "1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179       $  1,173       $  1,143       $  195"
+        }
+      },
+      "working_capital_change": {
+        "label": "Variación de capital de trabajo",
+        "value": null,
+        "derivado": false,
+        "no_verificado": true,
+        "nota": "Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.",
+        "citation": null
+      }
+    },
+    "fcf": {
+      "value": null,
+      "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
+    },
+    "cagr": {
+      "value": 0.10770153950216987,
+      "nota": "CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años)."
+    },
+    "valuation": {
+      "price": 452.35,
+      "price_as_of": "2026-11-17",
+      "price_citation": {
+        "doc_id": "YAHOO-CHART:SPGI",
+        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":452.35"
+      },
+      "pe": 30.86825877879669,
+      "fcf_yield": null,
+      "market_cap": 138011985000.0,
+      "veredicto": "cara",
+      "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
+    }
+  },
+  "COST": {
+    "ticker": "COST",
+    "filing_doc_id": "CIK0000909832-0000909832-26-000093",
+    "report_date": "2026-08-30",
+    "figures": {
+      "revenue": {
+        "label": "Ingresos (2026-08-30)",
+        "value": 303154000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000909832-0000909832-26-000093",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "2024    REVENUE              Net sales  $  297,247       $  269,912       $  249,625       Membership fees  5,907       5,323       4,828       Total revenue  303,154"
+        }
+      },
+      "operating_income": {
+        "label": "Utilidad operativa",
+        "value": 11685000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000909832-0000909832-26-000093",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "Merchandise costs  264,279       239,886       222,358       Selling, general and administrative  27,190       24,966       22,810       Operating income  11,685"
+        }
+      },
+      "ebitda": {
+        "label": "EBITDA (derivado)",
+        "value": 14359000000.0,
+        "derivado": true,
+        "no_verificado": false,
+        "nota": "EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).",
+        "citation": null
+      },
+      "net_income": {
+        "label": "Utilidad neta",
+        "value": 9226000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000909832-0000909832-26-000093",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "INCOME TAXES  12,251       10,818       9,740       Provision for income taxes  3,025       2,719       2,373                                   NET INCOME  $  9,226"
+        }
+      },
+      "capex": {
+        "label": "CAPEX (compra de propiedad, planta y equipo)",
+        "value": 6435000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000909832-0000909832-26-000093",
+          "seccion": "Estado de flujo de efectivo / nota de propiedad, planta y equipo",
+          "frase_exacta": "rovided by operating activities  15,817       13,335       11,339       CASH FLOWS FROM INVESTING ACTIVITIES              Additions to property and equipment  ( 6,435"
+        }
+      },
+      "working_capital_change": {
+        "label": "Variación de capital de trabajo",
+        "value": -718000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000909832-0000909832-26-000093",
+          "seccion": "Estado de flujo de efectivo",
+          "frase_exacta": "rchandise inventories  ( 1,153 )      559       ( 2,068 )      Accounts payable  2,755       404       1,938       Other operating assets and liabilities, net  718"
+        }
+      }
+    },
+    "fcf": {
+      "value": 5617000000.0,
+      "nota": "FCF = EBITDA (derivado) − impuestos (devengado) − CAPEX − ΔWK."
+    },
+    "cagr": {
+      "value": 0.09183862498726847,
+      "nota": "CAGR de ingresos entre 2024-09-01 y 2026-08-30 (1.99 años)."
+    },
+    "valuation": {
+      "price": 1110.08,
+      "price_as_of": "2026-11-17",
+      "price_citation": {
+        "doc_id": "YAHOO-CHART:COST",
+        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":1110.08"
+      },
+      "pe": 53.47382659440711,
+      "fcf_yield": 0.011385437149379576,
+      "market_cap": 493349524159.99994,
+      "veredicto": "cara",
+      "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
+    }
+  },
+  "AAPL": {
+    "ticker": "AAPL",
+    "filing_doc_id": "CIK0000320193-0000320193-26-000026",
+    "report_date": "2026-09-26",
+    "figures": {
+      "revenue": {
+        "label": "Ingresos (2026-09-26)",
+        "value": 478834000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000320193-0000320193-26-000026",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "4    Net sales:               Products  $  355,533       $  307,003       $  294,866        Services  123,301       109,158       96,169       Total net sales  478,834"
+        }
+      },
+      "operating_income": {
+        "label": "Utilidad operativa",
+        "value": 158063000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000320193-0000320193-26-000026",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "ral and administrative  29,774       27,601       26,097       Total operating expenses  75,539       62,151       57,467                     Operating income  158,063"
+        }
+      },
+      "ebitda": {
+        "label": "EBITDA (derivado)",
+        "value": 171486000000.0,
+        "derivado": true,
+        "no_verificado": false,
+        "nota": "EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).",
+        "citation": null
+      },
+      "net_income": {
+        "label": "Utilidad neta",
+        "value": 132175000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000320193-0000320193-26-000026",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "before provision for income taxes  159,237       132,729       123,485       Provision for income taxes  27,062       20,719       29,749       Net income  $  132,175"
+        }
+      },
+      "capex": {
+        "label": "CAPEX (compra de propiedad, planta y equipo)",
+        "value": 9041000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0000320193-0000320193-26-000026",
+          "seccion": "Estado de flujo de efectivo / nota de propiedad, planta y equipo",
+          "frase_exacta": "51,211       Proceeds from sales of marketable securities  14,280       12,890       11,135       Payments for acquisition of property, plant and equipment  ( 9,041"
+        }
+      },
+      "working_capital_change": {
+        "label": "Variación de capital de trabajo",
+        "value": null,
+        "derivado": false,
+        "no_verificado": true,
+        "nota": "Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.",
+        "citation": null
+      }
+    },
+    "fcf": {
+      "value": null,
+      "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
+    },
+    "cagr": {
+      "value": 0.10696966768323302,
+      "nota": "CAGR de ingresos entre 2024-09-28 y 2026-09-26 (1.99 años)."
+    },
+    "valuation": {
+      "price": 351.91,
+      "price_as_of": "2026-11-17",
+      "price_citation": {
+        "doc_id": "YAHOO-CHART:AAPL",
+        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":351.91"
+      },
+      "pe": 39.192153466691884,
+      "fcf_yield": null,
+      "market_cap": 5180222884460.0,
+      "veredicto": "cara",
+      "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
+    }
+  },
+  "UBER": {
+    "ticker": "UBER",
+    "filing_doc_id": "CIK0001543151-0001543151-26-000015",
+    "report_date": "2025-12-31",
+    "figures": {
+      "revenue": {
+        "label": "Ingresos (2025-12-31)",
+        "value": 52017000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0001543151-0001543151-26-000015",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "amounts)                                                   Year Ended December 31,        2023    2024    2025    Revenue    $  37,281       $  43,978       $  52,017"
+        }
+      },
+      "operating_income": {
+        "label": "Utilidad operativa",
+        "value": 5565000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0001543151-0001543151-26-000015",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "rtization    823       711       719       Total costs and expenses    36,171       41,179       46,452       Income from operations    1,110       2,799       5,565"
+        }
+      },
+      "ebitda": {
+        "label": "EBITDA (derivado)",
+        "value": 6284000000.0,
+        "derivado": true,
+        "no_verificado": false,
+        "nota": "EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).",
+        "citation": null
+      },
+      "net_income": {
+        "label": "Utilidad neta",
+        "value": 10053000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0001543151-0001543151-26-000015",
+          "seccion": "Estado de resultados",
+          "frase_exacta": "non-controlling interests, net of tax    269       ( 11 )      40       Net income attributable to Uber Technologies, Inc.    $  1,887       $  9,856       $  10,053"
+        }
+      },
+      "capex": {
+        "label": "CAPEX (compra de propiedad, planta y equipo)",
+        "value": 336000000.0,
+        "derivado": false,
+        "no_verificado": false,
+        "nota": null,
+        "citation": {
+          "doc_id": "CIK0001543151-0001543151-26-000015",
+          "seccion": "Estado de flujo de efectivo / nota de propiedad, planta y equipo",
+          "frase_exacta": "s    3,585       7,137       10,099       Cash flows from investing activities                Purchases of property and equipment    ( 223 )      ( 242 )      ( 336"
+        }
+      },
+      "working_capital_change": {
+        "label": "Variación de capital de trabajo",
+        "value": null,
+        "derivado": false,
+        "no_verificado": true,
+        "nota": "Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.",
+        "citation": null
+      }
+    },
+    "fcf": {
+      "value": null,
+      "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
+    },
+    "cagr": {
+      "value": 0.181080234419132,
+      "nota": "CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años)."
+    },
+    "valuation": {
+      "price": 68.81,
+      "price_as_of": "2026-11-17",
+      "price_citation": {
+        "doc_id": "YAHOO-CHART:UBER",
+        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":68.81"
+      },
+      "pe": 14.508683983885408,
+      "fcf_yield": null,
+      "market_cap": 145855800090.0,
+      "veredicto": "barata",
+      "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
+    }
+  }
+}

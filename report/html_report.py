@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import html as _html
+import json as _json
 from datetime import datetime, timezone
 
 from calc.fcf import CagrResult, FcfResult
@@ -90,6 +91,131 @@ _SCRIPT = """(function () {
     }
     window.requestAnimationFrame(step);
   }
+
+  // --- "Pruébalo con una acción" (experimental): todo con datos ya
+  // embebidos en la página (data-json), nunca una llamada de red desde el
+  // navegador. Construido solo con createElement y textContent.
+  (function () {
+    var dataEl = document.getElementById("companies-data");
+    var select = document.getElementById("company-select");
+    var resultEl = document.getElementById("try-it-result");
+    if (!dataEl || !select || !resultEl) return;
+
+    var companies = {};
+    try {
+      companies = JSON.parse(dataEl.getAttribute("data-json") || "{}");
+    } catch (e) {
+      companies = {};
+    }
+
+    Object.keys(companies).sort().forEach(function (ticker) {
+      var opt = document.createElement("option");
+      opt.value = ticker;
+      opt.textContent = ticker;
+      select.appendChild(opt);
+    });
+
+    function clear(el) {
+      while (el.firstChild) el.removeChild(el.firstChild);
+    }
+
+    function money(value) {
+      if (value === null || value === undefined) return "no verificado";
+      return "US$ " + Math.round(value).toLocaleString("en-US");
+    }
+
+    function pct(value) {
+      if (value === null || value === undefined) return "no verificado";
+      return (value * 100).toFixed(2) + "%";
+    }
+
+    function badge(text, kind) {
+      var span = document.createElement("span");
+      span.className = "badge badge-" + kind;
+      span.textContent = text;
+      return span;
+    }
+
+    function figureRow(figure) {
+      var row = document.createElement("div");
+      row.className = "try-it-figure";
+      var label = document.createElement("span");
+      label.className = "try-it-figure-label";
+      label.textContent = figure.label;
+      var value = document.createElement("span");
+      value.className = "try-it-figure-value";
+      value.textContent = money(figure.value);
+      row.appendChild(label);
+      row.appendChild(value);
+      if (figure.no_verificado) row.appendChild(badge("no verificado", "warn"));
+      else if (figure.derivado) row.appendChild(badge("derivado", "info"));
+      else row.appendChild(badge("citado", "ok"));
+      return row;
+    }
+
+    function badgeKindForVerdict(verdict) {
+      if (verdict === "barata") return "ok";
+      if (verdict === "cara") return "warn";
+      if (verdict === "neutral") return "info";
+      return "warn"; // "no verificado"
+    }
+
+    function renderResult(ticker) {
+      var company = companies[ticker];
+      clear(resultEl);
+      if (!company) return;
+
+      var thinking = document.createElement("p");
+      thinking.className = "thinking";
+      thinking.textContent = "🤖 Analizando " + ticker + "…";
+      resultEl.appendChild(thinking);
+
+      window.setTimeout(
+        function () {
+          clear(resultEl);
+          var valuation = company.valuation;
+
+          var head = document.createElement("div");
+          head.className = "try-it-result-head";
+          var title = document.createElement("h3");
+          title.textContent = ticker + " — " + company.filing_doc_id;
+          head.appendChild(title);
+          head.appendChild(badge(valuation.veredicto, badgeKindForVerdict(valuation.veredicto)));
+          resultEl.appendChild(head);
+
+          var priceP = document.createElement("p");
+          priceP.className = "try-it-price";
+          if (valuation.price !== null) {
+            priceP.textContent =
+              "Precio (" + valuation.price_as_of + "): US$ " + valuation.price.toFixed(2) +
+              " · P/E: " + (valuation.pe !== null ? valuation.pe.toFixed(1) : "no verificado") +
+              " · FCF yield: " + pct(valuation.fcf_yield);
+          } else {
+            priceP.textContent = "Precio no disponible (no verificado).";
+          }
+          resultEl.appendChild(priceP);
+
+          var notaP = document.createElement("p");
+          notaP.className = "card-note";
+          notaP.textContent = valuation.nota;
+          resultEl.appendChild(notaP);
+
+          var figuresWrap = document.createElement("div");
+          figuresWrap.className = "try-it-figures";
+          Object.keys(company.figures).forEach(function (key) {
+            figuresWrap.appendChild(figureRow(company.figures[key]));
+          });
+          resultEl.appendChild(figuresWrap);
+        },
+        prefersReduced ? 0 : 650
+      );
+    }
+
+    select.addEventListener("change", function () {
+      if (select.value) renderResult(select.value);
+      else clear(resultEl);
+    });
+  })();
 
   var items = document.querySelectorAll(".reveal");
   if (prefersReduced || !("IntersectionObserver" in window)) {
@@ -233,6 +359,46 @@ _STYLE = """
   .badge-info { background: #dbeafe; color: #1e40af; }
   .badge-warn { background: #fef3c7; color: #92400e; }
   .cambios-body { white-space: pre-line; }
+
+  .try-it { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.5rem; }
+  .try-it-warning {
+    background: var(--warn-bg); border-left: 4px solid var(--warn-border); border-radius: 10px;
+    padding: .9rem 1.1rem; font-size: .85rem; margin-bottom: 1.25rem;
+  }
+  .try-it-head { display: flex; align-items: center; gap: .9rem; margin-bottom: 1rem; }
+  .try-it-head h2 { margin: 0; }
+  .bot-avatar {
+    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
+    animation: bot-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes bot-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+  .try-it-label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; }
+  .try-it-select {
+    width: 100%; max-width: 320px; padding: .55rem .7rem; border-radius: 10px;
+    border: 1px solid var(--surface-2); background: #ffffff; color: var(--text); font-size: .95rem;
+  }
+  .try-it-select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .try-it-result { margin-top: 1.25rem; min-height: 1px; }
+  .try-it-result-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .try-it-result-head h3 { margin: 0; font-size: 1rem; }
+  .try-it-price { font-size: .95rem; margin: .5rem 0; }
+  .try-it-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem; margin-top: .75rem; }
+  .try-it-figure {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    background: #ffffff; border: 1px solid var(--surface-2); border-radius: 10px; padding: .5rem .7rem; font-size: .82rem;
+  }
+  .try-it-figure-label { color: var(--muted); }
+  .try-it-figure-value { font-weight: 700; }
+  .thinking { color: var(--muted); }
+  .thinking::after { content: ""; animation: thinking-dots 1.2s steps(4, end) infinite; }
+  @keyframes thinking-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+  @media (prefers-reduced-motion: reduce) {
+    .bot-avatar { animation: none; }
+    .thinking::after { animation: none; content: "..."; }
+  }
+
   footer {
     text-align: center; color: var(--muted); font-size: .85rem;
     padding: 1.5rem; border-top: 1px solid var(--surface-2);
@@ -479,6 +645,35 @@ def _calc_cards(fcf: FcfResult, cagr: CagrResult) -> str:
     </section>"""
 
 
+def _try_it_section(companies: dict | None) -> str:
+    if not companies:
+        return ""
+    companies_json = _json.dumps(companies, ensure_ascii=False, separators=(",", ":"))
+    return f"""
+    <section class="try-it reveal" aria-labelledby="try-it-title">
+      <p class="try-it-warning">
+        <strong>⚠️ Esto es una prueba (experimental).</strong> La lectura de "barata" o "cara" es
+        automática y simple (P/E y FCF yield con dos umbrales fijos) — no es la metodología
+        completa de un manual de inversión, no compara contra el sector ni revisa señales de
+        alerta, y de ninguna manera es asesoría financiera. No tomes ninguna decisión basada en
+        esto.
+      </p>
+      <div class="try-it-head">
+        <span class="bot-avatar" aria-hidden="true">🤖</span>
+        <div>
+          <h2 id="try-it-title">Pruébalo con una acción</h2>
+          <p class="section-intro">Elige una empresa ya verificada y mira el mismo pipeline correr sobre sus cifras.</p>
+        </div>
+      </div>
+      <label class="try-it-label" for="company-select">Empresa</label>
+      <select id="company-select" class="try-it-select">
+        <option value="">— elige una empresa —</option>
+      </select>
+      <div id="try-it-result" class="try-it-result" aria-live="polite"></div>
+    </section>
+    <div id="companies-data" hidden data-json="{_esc(companies_json)}"></div>"""
+
+
 def build_html_report(
     *,
     empresa_ejemplo: str,
@@ -488,6 +683,7 @@ def build_html_report(
     cagr: CagrResult,
     resumen_cambios: str | None = None,
     generated_at: datetime | None = None,
+    companies: dict | None = None,
 ) -> str:
     generated_at = generated_at or datetime.now(timezone.utc)
     cards = "".join(
@@ -530,6 +726,7 @@ def build_html_report(
       {_calc_cards(fcf, cagr)}
     </section>
     {cambios_section}
+    {_try_it_section(companies)}
     {_trust_section()}
   </main>
   <footer>

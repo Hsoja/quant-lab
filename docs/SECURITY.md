@@ -19,5 +19,28 @@ le dio (`enforce_citations`): no se confía en que el modelo siguió la regla de
 comprueba después, de forma determinista — el mismo espíritu del verificador de citas, aplicado
 a la salida del LLM.
 
-Revisar y ampliar esta tabla en cada fase que añada una superficie nueva (ej. si se agrega una
-interfaz web).
+## Actualización — "Pruébalo con una acción" (SPEC.md sección 9)
+
+Nueva fuente externa (`ingest/price.py`, Yahoo Finance no oficial) y una nueva superficie en la
+página web. Ninguna de las dos cambia el modelo de amenazas de fondo:
+
+- **El fetch de precio ocurre en el build (`scripts/precompute_examples.py`), nunca en el
+  navegador.** La página sigue sin hacer ninguna llamada de red: los datos de las empresas de
+  ejemplo viajan embebidos en un atributo HTML (`data-json`), no en un `<script>` con el JSON
+  dentro (evita depender de cómo cada navegador aplica la CSP a ese tipo de bloque) y se leen con
+  `JSON.parse` + `textContent`/`createElement` — nunca con `innerHTML`.
+- **Mismas reglas de acceso que `ingest/edgar.py`:** solo `https://`, límite de tasa, reintento
+  con backoff, tope de tamaño de respuesta. Si la fuente de precio falla, el precio (y todo lo
+  que depende de él) sale "no verificado" — nunca un valor de respaldo.
+- **Hallazgo real durante esta fase:** la CSP original (`script-src 'self'`) bloqueaba el propio
+  `<script>` inline de la página, porque `'self'` no permite scripts inline, solo scripts con
+  `src=`. El navegador lo bloqueaba en silencio y todo el contenido `.reveal` se quedaba invisible
+  para siempre. Corregido permitiendo el script por el **hash SHA-256 de su contenido exacto**
+  (`script-src 'self' 'sha256-...'`), calculado en Python a partir del mismo texto que se inserta
+  en la página — nunca con `'unsafe-inline'`. Un nonce no habría servido: la página es estática, así
+  que el nonce sería siempre el mismo, visible en el propio HTML, sin ningún valor real. Además, el
+  contenido ahora es visible **por defecto** y solo se "pre-esconde" si el script confirma que
+  arrancó (clase `.js-ready`), para que un futuro fallo del script, por cualquier motivo, no vuelva
+  a dejar la página en blanco.
+
+Revisar y ampliar esta tabla en cada fase que añada una superficie nueva.

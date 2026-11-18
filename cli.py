@@ -10,6 +10,7 @@ cifras, calcula FCF y CAGR, y escribe el reporte en Markdown y en HTML
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -21,6 +22,18 @@ from ingest.edgar import download_filing, get_cik, list_10k_filings, save_filing
 from report.html_report import build_html_report
 from report.report import build_report
 from verify.verifier import verify_all
+
+_EXAMPLES_COMPANIES_PATH = Path(__file__).resolve().parent / "examples" / "companies.json"
+
+
+def _load_example_companies() -> dict | None:
+    """Datos precalculados para "Pruébalo con una acción" (ver SPEC.md 9).
+    Si el archivo no existe o no se puede leer, la página simplemente no
+    muestra esa sección — nunca se inventan empresas de ejemplo."""
+    try:
+        return json.loads(_EXAMPLES_COMPANIES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def run(ticker: str, out_dir: str) -> None:
@@ -45,7 +58,8 @@ def run(ticker: str, out_dir: str) -> None:
         empresa_ejemplo=ticker, filing_doc_id=filing.doc_id, verified=verified, fcf=fcf, cagr=cagr
     )
     html = build_html_report(
-        empresa_ejemplo=ticker, filing_doc_id=filing.doc_id, verified=verified, fcf=fcf, cagr=cagr
+        empresa_ejemplo=ticker, filing_doc_id=filing.doc_id, verified=verified, fcf=fcf, cagr=cagr,
+        companies=_load_example_companies(),
     )
 
     Path(out_dir, "reporte.md").write_text(md, encoding="utf-8")

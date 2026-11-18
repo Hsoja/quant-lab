@@ -180,7 +180,68 @@ historia quedan para una fase posterior.
 - Sin `eval`, `exec` ni `subprocess(shell=True)`.
 - Tope de tokens y de salida en cualquier llamada al LLM.
 
-## 8. Historial
+## 9. Pruébalo con una acción (experimental)
+
+Apartado interactivo adicional en la página web, pedido explícitamente como "una prueba, no te
+bases en esto". Deja elegir entre unas pocas empresas de ejemplo **ya precalculadas** y muestra,
+además de las cifras citadas de siempre, una lectura mecánica de "barata / cara / neutral".
+
+### 9.1 Por qué no es en vivo
+
+Dejar escribir cualquier ticker y calcularlo al momento necesitaría un servidor corriendo en
+algún lugar — exactamente la superficie de ataque nueva que este proyecto evita a propósito (ver
+`docs/SECURITY.md`). En vez de eso: un script (`scripts/precompute_examples.py`) corre el pipeline
+completo para una lista corta de empresas y guarda el resultado en `examples/companies.json`. La
+página solo lee ese JSON ya embebido (atributo `data-json`, nunca un `<script>` con el JSON
+dentro, para no depender de cómo cada navegador trata la CSP ahí) — cero llamadas de red desde el
+navegador, cero cambio a la superficie de seguridad de la página.
+
+### 9.2 Precio de la acción — fuente NO oficial
+
+SEC EDGAR no trae precios de mercado. Se usa el endpoint de gráficas de Yahoo Finance
+(`ingest/price.py`): funciona, pero **no es una API pública documentada ni soportada**, puede
+cambiar o dejar de funcionar sin aviso. Se probó primero Stooq (gratis, sin llave) pero ahora exige
+un reto de JavaScript que un script no puede resolver — descartada. Si la fuente de precio falla,
+el precio y todo lo que depende de él (P/E, FCF yield, veredicto) salen **"no verificado"**; nunca
+se inventa ni se usa un precio de respaldo.
+
+La cita del precio reutiliza exactamente el mismo formato `{doc_id, sección, frase_exacta, hash}`
+que una cita del 10-K, y el mismo verificador (`verify_citation`): `frase_exacta` es la porción
+literal de la respuesta cruda de Yahoo (ej. `"regularMarketPrice":452.35`), `hash` es el sha256 de
+esa respuesta completa.
+
+### 9.3 EPS y las dos razones calculadas
+
+- **EPS (derivado):** utilidad neta (`us-gaap:NetIncomeLoss`) ÷ acciones diluidas
+  (`us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding`, con
+  `WeightedAverageNumberOfSharesOutstandingBasic` como candidato de respaldo).
+- **P/E** = precio ÷ EPS. Solo se calcula si EPS > 0.
+- **FCF yield** = FCF ÷ capitalización de mercado (precio × acciones diluidas). Depende del FCF
+  (sección 4.5), que a su vez depende de ΔWK — por eso sale "no verificado" en varias de las
+  empresas de ejemplo, honestamente, en vez de aproximarlo.
+
+### 9.4 Veredicto — simplificación documentada, no el manual completo
+
+Dos umbrales fijos, sin comparación sectorial, sin las 7 señales de alerta, sin PEG, sin considerar
+el crecimiento:
+
+| Señal | Barata | Cara |
+| --- | --- | --- |
+| P/E | ≤ 20 | ≥ 30 |
+| FCF yield | ≥ 5 % | < 2 % |
+
+Si ambas señales coinciden → ese veredicto. Si no coinciden → "neutral". Si no hay ninguna señal
+calculable → "no verificado". El reporte web muestra esta limitación explícitamente junto al
+veredicto; nunca se presenta como la metodología completa del manual de inversión, y nunca se
+convierte en "compra" o "vende" (regla 4, igual que todo lo demás en este proyecto).
+
+### 9.5 Empresas de ejemplo (probadas en vivo, 2026-11-18)
+
+SPGI, COST, AAPL, UBER. Mezcla a propósito: COST y SPGI salen con todas las cifras citadas; AAPL y
+UBER muestran ΔWK (y por lo tanto FCF y FCF yield) como "no verificado" — bueno para demostrar que
+el sistema no inventa cuando falta una fuente.
+
+## 10. Historial
 
 - 2026-11-17 — v1. Creado para el bloque de arranque. Empresa de ejemplo y fuente elegidas,
   acceso a EDGAR probado en vivo, decisiones de cálculo de EBITDA/impuestos/CAPEX/ΔWK fijadas,
@@ -199,3 +260,15 @@ historia quedan para una fase posterior.
   azul claro, sin backend ni formularios, con CSP estricta y todo texto escapado. Se corrigió un
   bug real: `CitedValue.no_verificado` marcaba EBITDA como "no verificado" aunque sus dos
   componentes estuvieran citados, porque un valor derivado nunca tiene cita propia a propósito.
+- 2026-11-18 — v1.3. Rediseño de la página web (ver README "La página web") y bug real corregido:
+  la propia CSP de la página (`script-src 'self'` sin permitir el `<script>` inline) bloqueaba el
+  script que revela el contenido — todo se quedaba invisible. Arreglado con un hash SHA-256 del
+  script exacto en vez de `'unsafe-inline'`, y además el contenido pasa a ser visible por defecto
+  (solo se "pre-esconde" si el script confirma que arrancó), para que un futuro fallo del script,
+  por cualquier motivo, nunca vuelva a dejar la página en blanco.
+- 2026-11-18 — v1.4. Sección 9: apartado interactivo "Pruébalo con una acción" (experimental),
+  con precio de Yahoo Finance (no oficial), EPS/P/E/FCF yield derivados y un veredicto simple
+  barata/cara/neutral — todo precalculado (`scripts/precompute_examples.py`), nunca en vivo desde
+  el navegador. Repo publicado como público en GitHub (decisión explícita, fuera del alcance
+  original "privado por ahora" de la sección 7): `github.com/Hsoja/quant-lab`, página en
+  `hsoja.github.io/quant-lab`.

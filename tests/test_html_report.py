@@ -208,3 +208,88 @@ def test_reveal_content_is_visible_by_default_without_javascript():
     assert not bare_hidden_rules, f"`.reveal` se esconde sin `.js-ready` por delante: {bare_hidden_rules}"
     assert ".js-ready .reveal" in css
     assert 'classList.add("js-ready")' in html
+
+
+def _sample_companies():
+    return {
+        "FAKE": {
+            "ticker": "FAKE",
+            "filing_doc_id": "CIK0-0001",
+            "report_date": "2025-12-31",
+            "figures": {
+                "revenue": {
+                    "label": "Ingresos", "value": 1100.0, "derivado": False, "no_verificado": False,
+                    "nota": None, "citation": {"doc_id": "CIK0-0001", "seccion": "S", "frase_exacta": "Revenue $ 1,100"},
+                },
+            },
+            "fcf": {"value": None, "nota": "falta ΔWK"},
+            "cagr": {"value": 0.05, "nota": "CAGR de prueba"},
+            "valuation": {
+                "price": 10.0, "price_as_of": "2025-12-31",
+                "price_citation": {"doc_id": "YAHOO-CHART:FAKE", "seccion": "Cotización", "frase_exacta": '"regularMarketPrice":10'},
+                "pe": 12.5, "fcf_yield": None, "market_cap": 1000.0, "veredicto": "barata",
+                "nota": "Lectura automática simple; es una prueba.",
+            },
+        }
+    }
+
+
+def test_try_it_section_absent_without_companies_data():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=None,
+    )
+    # El script siempre menciona estos IDs (debe degradarse sin datos), pero
+    # el HTML de la sección en sí solo existe si se le dieron empresas.
+    assert 'data-json=' not in html
+    assert '<select id="company-select"' not in html
+    assert '<h2 id="try-it-title">' not in html
+
+
+def test_try_it_section_has_warning_and_bot_avatar():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=_sample_companies(),
+    )
+    assert "Esto es una prueba" in html
+    assert "no es asesoría financiera" in html.lower() or "asesoría financiera" in html
+    assert "bot-avatar" in html
+    assert 'id="company-select"' in html
+    assert 'id="try-it-result"' in html
+
+
+def test_try_it_section_escapes_embedded_company_data():
+    companies = _sample_companies()
+    companies["FAKE"]["figures"]["revenue"]["citation"]["frase_exacta"] = "<script>alert(1)</script>"
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=companies,
+    )
+    assert "<script>alert(1)</script>" not in html
+    # El JSON va dentro de un atributo HTML (data-json), nunca en un <script> propio.
+    assert 'id="companies-data"' in html
+    assert re.search(r'<script[^>]*>\s*\{', html) is None
+
+
+def test_try_it_section_js_has_no_syntax_errors():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=_sample_companies(),
+    )
+    script_match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
+    assert script_match
+    if shutil.which("node") is None:
+        pytest.skip("node no está disponible en este entorno")
+    result = subprocess.run(
+        ["node", "--check", "/dev/stdin"],
+        input=script_match.group(1), capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
