@@ -55,7 +55,7 @@ de decisiones, interfaz web.
   filtrar `form == "10-K"`).
 - Documento: `https://www.sec.gov/Archives/edgar/data/{cik}/{accession_sin_guiones}/{primaryDocument}`.
 - **Obligatorio:** header `User-Agent` con un contacto identificable (`EDGAR_CONTACT` en `.env`,
-  nunca hardcodeado ni con datos personales de Katherine). SEC no verifica el correo, pero exige
+  nunca hardcodeado ni con datos personales de quien lo use). SEC no verifica el correo, pero exige
   el formato.
 - **Límite de tasa:** SEC pide no pasar de ~10 solicitudes/segundo. El ingestor usa **1 solicitud
   por segundo** (conservador) y reintenta con backoff si responde 429 o 5xx.
@@ -192,3 +192,10 @@ historia quedan para una fase posterior.
   no estaba etiquetado en el filing real; el segundo sí. Resultado honesto del MVP: todas las
   cifras salen citadas salvo ΔWK, que este filing no reporta como línea agregada — queda
   "no verificado" a propósito, sin sumar líneas sueltas (regla 4.4 paso 3).
+- 2026-11-18 — v1.2. Fases 5-6 construidas: `llm/` (resumen de cambios; el modelo nunca recibe el
+  documento crudo, solo el JSON de hechos ya verificados) y `report/` (Markdown final). Se agregó
+  `cli.py` (pipeline completo de punta a punta) y, fuera del alcance original del MVP, una
+  **página web estática** adicional (`report/html_report.py`): blanco y
+  azul claro, sin backend ni formularios, con CSP estricta y todo texto escapado. Se corrigió un
+  bug real: `CitedValue.no_verificado` marcaba EBITDA como "no verificado" aunque sus dos
+  componentes estuvieran citados, porque un valor derivado nunca tiene cita propia a propósito.

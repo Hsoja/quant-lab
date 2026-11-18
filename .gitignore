@@ -3,5 +3,6 @@ __pycache__/
 *.pyc
 .pytest_cache/
 data/raw/
+salida/
 .venv/
 *.egg-info/
