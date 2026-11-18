@@ -89,13 +89,18 @@ _rate_limiter = _RateLimiter()
 
 def _get(url: str) -> bytes:
     """GET con User-Agent obligatorio, límite de tasa y reintento con backoff."""
+    if not url.startswith("https://"):
+        # Nunca seguimos esquemas como file:// o ftp://, aunque la URL venga de
+        # un valor armado dentro de este mismo módulo (defensa en profundidad:
+        # hallazgo de bandit B310).
+        raise EdgarAccessError(f"Esquema de URL no permitido (solo https): {url}")
     headers = {"User-Agent": _user_agent()}
     last_error: Exception | None = None
     for attempt in range(1, MAX_RETRIES + 1):
         _rate_limiter.wait()
         request = urllib.request.Request(url, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # nosec B310
                 content = response.read(MAX_DOCUMENT_BYTES + 1)
                 if len(content) > MAX_DOCUMENT_BYTES:
                     raise EdgarAccessError(

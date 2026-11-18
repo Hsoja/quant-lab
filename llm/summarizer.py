@@ -23,7 +23,7 @@ import re
 from extract.facts import CitedValue
 
 MAX_OUTPUT_TOKENS = 1024
-DEFAULT_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "claude-sonnet-5-5"
 
 SYSTEM_PROMPT = """Eres un redactor de resúmenes financieros para una herramienta de investigación.
 No es asesoría financiera y nunca recomiendas comprar ni vender.

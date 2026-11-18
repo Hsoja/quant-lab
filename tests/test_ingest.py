@@ -151,6 +151,19 @@ def test_download_filing_gives_up_after_max_retries(monkeypatch):
         edgar.download_filing(filing)
 
 
+def test_get_rejects_non_https_scheme(monkeypatch):
+    """Nunca seguimos file:// ni otros esquemas, aunque alguien arme una URL
+    rara a mano (hallazgo de bandit B310, cerrado en ingest/edgar.py)."""
+    called = {"n": 0}
+    monkeypatch.setattr(
+        edgar.urllib.request, "urlopen",
+        lambda *a, **k: called.__setitem__("n", called["n"] + 1) or _FakeResponse(b"x"),
+    )
+    with pytest.raises(edgar.EdgarAccessError):
+        edgar._get("file:///etc/passwd")
+    assert called["n"] == 0  # ni siquiera se intentó abrir la conexión
+
+
 def test_get_rejects_document_over_size_cap(monkeypatch):
     too_big = b"x" * (edgar.MAX_DOCUMENT_BYTES + 10)
     monkeypatch.setattr(

@@ -1,0 +1,6 @@
+# Herramientas de la auditoría de seguridad (skill auditoria-seguridad).
+# No hacen falta para correr el proyecto, solo para escanearlo.
+-r requirements.txt
+bandit
+pip-audit
+semgrep

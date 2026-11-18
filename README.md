@@ -22,12 +22,17 @@ MVP completo (fases 0-6) y validado en vivo contra un 10-K real: `ingest/`, `ext
 
 ## Instalar
 
+Requiere **Python 3.9 o más nuevo** (las versiones parchadas de algunas dependencias no existen
+para 3.8; ver [`SECURITY_REPORT.md`](SECURITY_REPORT.md), hallazgo QL-5).
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # y pon tu propio contacto en EDGAR_CONTACT
 ```
+
+Para correr los escáneres de seguridad (bandit, pip-audit, semgrep): `pip install -r requirements-dev.txt`.
 
 ## Usar
 
