@@ -69,6 +69,7 @@ def test_list_10k_filings_filters_and_limits(monkeypatch):
         "0000064040-25-000052",
     ]
     assert filings[0].primary_document == "spgi-20251231.htm"
+    assert filings[0].report_date == "2025-12-31"
     assert filings[0].doc_id == "CIK0000064040-0000064040-26-000013"
 
 
@@ -86,6 +87,7 @@ def test_filing_document_url_has_no_dashes_in_accession():
         cik="0000064040",
         accession_number="0000064040-26-000013",
         filing_date="2026-02-11",
+        report_date="2025-12-31",
         primary_document="spgi-20251231.htm",
     )
     assert filing.document_url == (
@@ -123,6 +125,7 @@ def test_download_filing_retries_on_429_then_succeeds(monkeypatch):
         cik="0000064040",
         accession_number="0000064040-26-000013",
         filing_date="2026-02-11",
+        report_date="2025-12-31",
         primary_document="spgi-20251231.htm",
     )
     content = edgar.download_filing(filing)
@@ -141,6 +144,7 @@ def test_download_filing_gives_up_after_max_retries(monkeypatch):
         cik="0000064040",
         accession_number="0000064040-26-000013",
         filing_date="2026-02-11",
+        report_date="2025-12-31",
         primary_document="spgi-20251231.htm",
     )
     with pytest.raises(edgar.EdgarAccessError):

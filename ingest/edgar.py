@@ -20,6 +20,7 @@ from dataclasses import dataclass
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik10}.json"
 ARCHIVES_BASE = "https://www.sec.gov/Archives/edgar/data"
+COMPANY_CONCEPT_URL = "https://data.sec.gov/api/xbrl/companyconcept/CIK{cik10}/us-gaap/{concept}.json"
 
 REQUEST_TIMEOUT_SECONDS = 30
 MAX_DOCUMENT_BYTES = 50 * 1024 * 1024  # tope de tamaño: evita agotar memoria/disco
@@ -30,12 +31,17 @@ MAX_RETRIES = 3
 class EdgarAccessError(Exception):
     """El acceso a EDGAR falló de forma que no se debe simular ni inventar."""
 
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 @dataclass(frozen=True)
 class FilingRef:
     cik: str  # 10 dígitos, con ceros a la izquierda
     accession_number: str  # con guiones, ej. 0000064040-26-000013
     filing_date: str
+    report_date: str  # fin del periodo que cubre el reporte, ej. 2025-12-31
     primary_document: str
 
     @property
@@ -101,7 +107,7 @@ def _get(url: str) -> bytes:
             if exc.code in (429, 500, 502, 503, 504) and attempt < MAX_RETRIES:
                 time.sleep(2**attempt)
                 continue
-            raise EdgarAccessError(f"EDGAR respondió {exc.code} para {url}") from exc
+            raise EdgarAccessError(f"EDGAR respondió {exc.code} para {url}", status_code=exc.code) from exc
         except urllib.error.URLError as exc:
             last_error = exc
             if attempt < MAX_RETRIES:
@@ -136,12 +142,65 @@ def list_10k_filings(cik: str, limit: int = 5) -> list[FilingRef]:
                 cik=cik,
                 accession_number=recent["accessionNumber"][i],
                 filing_date=recent["filingDate"][i],
+                report_date=recent["reportDate"][i],
                 primary_document=recent["primaryDocument"][i],
             )
         )
         if len(results) >= limit:
             break
     return results
+
+
+@dataclass(frozen=True)
+class ConceptPeriod:
+    start: str | None
+    end: str
+    value: float
+
+
+def company_concept_periods_for_filing(
+    cik: str, concept: str, accession_number: str
+) -> list[ConceptPeriod]:
+    """Todas las columnas de año (start, end, val) de un concepto us-gaap que
+    aparecen etiquetadas dentro de un filing exacto (un 10-K normalmente
+    muestra 2-3 años comparativos de cada estado financiero).
+
+    Es solo una AYUDA INTERNA (ver SPEC.md sección 3): sirve para saber qué
+    cifra y qué periodo buscar dentro del HTML con iXBRL. Nunca es la fuente
+    de una cita. Devuelve [] si el filing no reporta ese concepto (no se
+    inventa un valor).
+    """
+    url = COMPANY_CONCEPT_URL.format(cik10=cik, concept=concept)
+    try:
+        data = json.loads(_get(url).decode("utf-8"))
+    except EdgarAccessError as exc:
+        if exc.status_code == 404:
+            return []  # la empresa no reporta este concepto: no es una falla
+        raise  # cualquier otra falla (red, 5xx) se propaga; no se disfraza de "no reportado"
+    periods = [
+        ConceptPeriod(start=entry.get("start"), end=entry["end"], value=float(entry["val"]))
+        for unit_values in data.get("units", {}).values()
+        for entry in unit_values
+        if entry.get("accn") == accession_number
+    ]
+    # Sin duplicados (un mismo periodo puede repetirse entre unidades/formularios).
+    seen: set[tuple[str | None, str, float]] = set()
+    unique: list[ConceptPeriod] = []
+    for p in periods:
+        key = (p.start, p.end, p.value)
+        if key not in seen:
+            seen.add(key)
+            unique.append(p)
+    return unique
+
+
+def company_concept_fy_value(cik: str, concept: str, filing: FilingRef) -> float | None:
+    """Valor oficial (en USD) de un concepto us-gaap para el año que cubre el
+    filing (su `report_date`), o None si no se reporta."""
+    for period in company_concept_periods_for_filing(cik, concept, filing.accession_number):
+        if period.end == filing.report_date:
+            return period.value
+    return None
 
 
 def sha256_hex(content: bytes) -> str:

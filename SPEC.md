@@ -93,13 +93,20 @@ base devengado (no caja). Es la cifra consistente con un FCF simplificado que pa
 
 ### 4.3 CAPEX
 
-Se usa **pagos por compra de propiedad, planta y equipo**
-(`us-gaap:PaymentsToAcquirePropertyPlantAndEquipment`) del estado de flujo de efectivo.
+Se usa **pagos/adiciones por compra de propiedad, planta y equipo**. No todas las empresas etiquetan
+este concepto igual, así que se prueban estos tags en orden y se usa el primero que el filing
+reporte (confirmado en vivo con la empresa de ejemplo, que no usa el primero):
+
+1. `us-gaap:PaymentsToAcquirePropertyPlantAndEquipment` (estado de flujo de efectivo — forma más común)
+2. `us-gaap:PropertyPlantAndEquipmentAdditions` (nota de adiciones a propiedad, planta y equipo — la
+   empresa de ejemplo usa esta)
 
 - No incluye intangibles capitalizados (ej. software interno) ni adquisiciones de negocios: quedan
   fuera del alcance del MVP. Esto es una **simplificación documentada**, no un "no verificado" —
   la cifra que se usa sí tiene cita completa, solo que el alcance de "inversión" es más angosto que
   el CAPEX total económico de la empresa.
+- Si ningún candidato aparece en el filing, CAPEX sale como "no verificado" (nunca se inventa un
+  tercer tag sobre la marcha fuera de esta lista documentada).
 
 ### 4.4 Variación de capital de trabajo (ΔWK)
 
@@ -178,3 +185,10 @@ historia quedan para una fase posterior.
 - 2026-11-17 — v1. Creado para el bloque de arranque. Empresa de ejemplo y fuente elegidas,
   acceso a EDGAR probado en vivo, decisiones de cálculo de EBITDA/impuestos/CAPEX/ΔWK fijadas,
   fases 4 y 5 invertidas (verificador antes del resumen LLM).
+- 2026-11-17 — v1.1. Fases 2–4 construidas y validadas en vivo contra el 10-K real de la empresa
+  de ejemplo: `extract/` (EBITDA derivado, impuestos, CAPEX, ingresos, ΔWK, todos citados contra
+  el HTML con iXBRL), `calc/` (FCF, CAGR de ingresos) y `verify/` (verificador, antes del LLM).
+  Corrección a la sección 4.3: CAPEX prueba dos tags candidatos en orden porque el tag original
+  no estaba etiquetado en el filing real; el segundo sí. Resultado honesto del MVP: todas las
+  cifras salen citadas salvo ΔWK, que este filing no reporta como línea agregada — queda
+  "no verificado" a propósito, sin sumar líneas sueltas (regla 4.4 paso 3).
