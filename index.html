@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-mO1xldGY7iLxKxxu8t5a+Rd72gFRvZugC+tmHuEzR8s='; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <title>SPGI — Reporte Quant Lab</title>
 <style>
@@ -139,7 +139,7 @@
         <span class="pill">🚫 Nunca "compra" ni "vende"</span>
       </div>
       <h1>SPGI</h1>
-      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:08 UTC</p>
+      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:41 UTC</p>
       <a class="hero-cta" href="#como-funciona">¿Cómo sé que esto es confiable? ↓</a>
     </div>
   </header>
@@ -338,66 +338,64 @@
     <p><strong>Análisis informativo, no asesoría financiera.</strong></p>
     <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
   </footer>
-  <script>
-  (function () {
-    "use strict";
-    var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  <script>(function () {
+  "use strict";
+  var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    var progress = document.getElementById("scroll-progress");
-    function updateProgress() {
-      var doc = document.documentElement;
-      var max = doc.scrollHeight - doc.clientHeight;
-      var pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
-      progress.style.width = pct + "%";
-    }
-    window.addEventListener("scroll", updateProgress, { passive: true });
-    updateProgress();
+  var progress = document.getElementById("scroll-progress");
+  function updateProgress() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
+    progress.style.width = pct + "%";
+  }
+  window.addEventListener("scroll", updateProgress, { passive: true });
+  updateProgress();
 
-    function animateCount(el) {
-      var raw = el.getAttribute("data-count");
-      if (raw === null) return;
-      var target = parseFloat(raw);
-      if (isNaN(target)) return;
-      var suffix = el.getAttribute("data-suffix") || "";
-      var isMoney = suffix === "";
-      if (prefersReduced) return; // el texto final ya está en el DOM, no hace falta animar
-      var start = null;
-      var duration = 900;
-      function step(ts) {
-        if (start === null) start = ts;
-        var progressRatio = Math.min((ts - start) / duration, 1);
-        var current = target * progressRatio;
-        if (isMoney) {
-          el.textContent = "US$ " + Math.round(current).toLocaleString("en-US");
-        } else {
-          el.textContent = (current >= 0 ? "+" : "") + current.toFixed(2) + suffix;
-        }
-        if (progressRatio < 1) {
-          window.requestAnimationFrame(step);
-        } else if (isMoney) {
-          el.textContent = "US$ " + Math.round(target).toLocaleString("en-US");
-        }
+  function animateCount(el) {
+    var raw = el.getAttribute("data-count");
+    if (raw === null) return;
+    var target = parseFloat(raw);
+    if (isNaN(target)) return;
+    var suffix = el.getAttribute("data-suffix") || "";
+    var isMoney = suffix === "";
+    if (prefersReduced) return; // el texto final ya está en el DOM, no hace falta animar
+    var start = null;
+    var duration = 900;
+    function step(ts) {
+      if (start === null) start = ts;
+      var progressRatio = Math.min((ts - start) / duration, 1);
+      var current = target * progressRatio;
+      if (isMoney) {
+        el.textContent = "US$ " + Math.round(current).toLocaleString("en-US");
+      } else {
+        el.textContent = (current >= 0 ? "+" : "") + current.toFixed(2) + suffix;
       }
-      window.requestAnimationFrame(step);
+      if (progressRatio < 1) {
+        window.requestAnimationFrame(step);
+      } else if (isMoney) {
+        el.textContent = "US$ " + Math.round(target).toLocaleString("en-US");
+      }
     }
+    window.requestAnimationFrame(step);
+  }
 
-    var items = document.querySelectorAll(".reveal");
-    if (prefersReduced || !("IntersectionObserver" in window)) {
-      items.forEach(function (el) { el.classList.add("is-visible"); });
-      return;
-    }
-    var observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("is-visible");
-          var counter = entry.target.querySelector("[data-count]");
-          if (counter) animateCount(counter);
-          observer.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.15 });
-    items.forEach(function (el) { observer.observe(el); });
-  })();
-  </script>
+  var items = document.querySelectorAll(".reveal");
+  if (prefersReduced || !("IntersectionObserver" in window)) {
+    items.forEach(function (el) { el.classList.add("is-visible"); });
+    return;
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        var counter = entry.target.querySelector("[data-count]");
+        if (counter) animateCount(counter);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  items.forEach(function (el) { observer.observe(el); });
+})();</script>
 </body>
 </html>
