@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
+<title>SPGI — Reporte Quant Lab</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --surface: #eef5ff;
+    --surface-2: #dbeafe;
+    --accent: #2563eb;
+    --accent-dark: #1e40af;
+    --text: #0f172a;
+    --muted: #51607a;
+    --warn-bg: #fff7ed;
+    --warn-border: #f59e0b;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  a { color: var(--accent-dark); }
+  header.top {
+    background: linear-gradient(135deg, var(--accent) 0%, #60a5fa 100%);
+    color: #ffffff;
+    padding: 2rem 1.5rem;
+  }
+  header.top h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+  header.top p { margin: 0; opacity: .9; font-size: .9rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+  section { margin-bottom: 1.75rem; }
+  h2 { color: var(--accent-dark); font-size: 1.15rem; }
+  .risk {
+    background: var(--warn-bg);
+    border-left: 4px solid var(--warn-border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+  }
+  .risk ul { margin: .5rem 0; padding-left: 1.25rem; }
+  .risk-note { color: var(--muted); font-size: .9rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--surface-2);
+    border-radius: var(--radius);
+    padding: 1rem 1.1rem;
+  }
+  .card-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+  .card h3 { margin: 0; font-size: .95rem; color: var(--text); }
+  .card-value { font-size: 1.5rem; font-weight: 700; margin: .4rem 0; color: var(--accent-dark); }
+  .card-note { color: var(--muted); font-size: .85rem; margin: 0; }
+  .card-detail summary { cursor: pointer; color: var(--accent-dark); font-size: .85rem; }
+  .card-detail summary:focus-visible, a:focus-visible, button:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  .card-detail div { font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+  .card-detail blockquote {
+    margin: .4rem 0 0; padding: .5rem .75rem; background: #ffffff;
+    border-left: 3px solid var(--accent); border-radius: 6px; font-style: italic;
+  }
+  .badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .badge-ok { background: #dcfce7; color: #166534; }
+  .badge-info { background: #dbeafe; color: #1e40af; }
+  .badge-warn { background: #fef3c7; color: #92400e; }
+  .cambios-body { white-space: pre-line; }
+  footer {
+    text-align: center; color: var(--muted); font-size: .85rem;
+    padding: 1.5rem; border-top: 1px solid var(--surface-2);
+  }
+  footer strong { color: var(--text); }
+  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.is-visible { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
+</head>
+<body>
+  <header class="top">
+    <h1>SPGI</h1>
+    <p>Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 04:58 UTC</p>
+  </header>
+  <main>
+    
+    <section class="risk reveal" aria-labelledby="risk-title">
+      <h2 id="risk-title">⚠️ Riesgo y limitaciones (léase primero)</h2>
+      <p>Estas cifras <strong>no se pudieron verificar</strong> con una cita en el documento y no se usaron en ningún cálculo:</p><ul><li>Variación de capital de trabajo</li></ul>
+      <p class="risk-fcf"><strong>El FCF no se pudo calcular:</strong> FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.</p>
+      <p class="risk-note">Este reporte describe lo que dice el documento oficial citado abajo;
+      no es una tesis de inversión completa y no sustituye leer el reporte completo.</p>
+    </section>
+    <section aria-label="Cifras con fuente">
+      <h2>📊 Cifras con fuente</h2>
+      <div class="grid">
+      <article class="card reveal" data-key="revenue">
+        <header class="card-head">
+          <h3>Ingresos</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 15,336,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>ts of Income                                            (in millions, except per share data)  Year Ended December 31,       2025    2024    2023    Revenue  $  15,336</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="operating_income">
+        <header class="card-head">
+          <h3>Utilidad operativa</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 6,478,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>n dispositions, net   ( 273 )      ( 59 )      70       Equity in income on unconsolidated subsidiaries   ( 28 )      ( 43 )      ( 36 )      Operating profit  6,478</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="depreciation_amortization">
+        <header class="card-head">
+          <h3>Depreciación y amortización</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 1,179,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Estado de flujo de efectivo<blockquote>reportable segments  1,164       1,160       1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="ebitda">
+        <header class="card-head">
+          <h3>EBITDA (derivado)</h3>
+          <span class="badge badge-info">derivado</span>
+        </header>
+        <p class="card-value">US$ 7,657,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).</div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="income_tax_expense">
+        <header class="card-head">
+          <h3>Gasto por impuestos (devengado)</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 1,407,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>est expense, net  287       297       334                     Income before taxes on income  6,227       5,308       3,671       Provision for taxes on income  1,407</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="income_tax_paid">
+        <header class="card-head">
+          <h3>Impuestos pagados en efectivo (referencia)</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 1,502,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Notas al estado de flujo de efectivo<blockquote>ear  $  1,745       $  1,666       $  1,291       Cash paid during the year for:              Interest  $  390       $  391       $  369       Income taxes  $  1,502</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="capex">
+        <header class="card-head">
+          <h3>CAPEX</h3>
+          <span class="badge badge-ok">citado</span>
+        </header>
+        <p class="card-value">US$ 195,000,000</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>CIK0000064040-0000064040-26-000013 · Estado de flujo de efectivo / nota de propiedad, planta y equipo<blockquote>1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179       $  1,173       $  1,143       $  195</blockquote></div>
+        </details>
+      </article>
+      <article class="card reveal" data-key="working_capital_change">
+        <header class="card-head">
+          <h3>Variación de capital de trabajo</h3>
+          <span class="badge badge-warn">no verificado</span>
+        </header>
+        <p class="card-value">no verificado</p>
+        <details class="card-detail">
+          <summary>Ver fuente</summary>
+          <div>Este filing no reporta una línea agregada de capital de trabajo (se probó: IncreaseDecreaseInOperatingCapital, IncreaseDecreaseInOperatingAssets, IncreaseDecreaseInOperatingLiabilities, IncreaseDecreaseInOtherOperatingCapitalNet). El MVP no suma líneas individuales a ciegas (SPEC.md 4.4, paso 3): queda como no verificado.</div>
+        </details>
+      </article>
+      </div>
+    </section>
+    <section aria-label="Cálculos">
+      <h2>🧮 Cálculos</h2>
+      
+    <section class="calc-grid" aria-label="Cálculos">
+      <article class="card reveal">
+        <h3>FCF</h3>
+        <p class="card-value">no verificado</p>
+        <p class="card-note">FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.</p>
+      </article>
+      <article class="card reveal">
+        <h3>CAGR de ingresos</h3>
+        <p class="card-value">+10.77%</p>
+        <p class="card-note">CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años).</p>
+      </article>
+    </section>
+    </section>
+    
+  </main>
+  <footer>
+    <p><strong>Análisis informativo, no asesoría financiera.</strong></p>
+    <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
+  </footer>
+  <script>
+  (function () {
+    "use strict";
+    var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var items = document.querySelectorAll(".reveal");
+    if (prefersReduced || !("IntersectionObserver" in window)) {
+      items.forEach(function (el) { el.classList.add("is-visible"); });
+      return;
+    }
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15 });
+    items.forEach(function (el) { observer.observe(el); });
+  })();
+  </script>
+</body>
+</html>
