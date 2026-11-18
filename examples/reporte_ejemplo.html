@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-mO1xldGY7iLxKxxu8t5a+Rd72gFRvZugC+tmHuEzR8s='; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-REAbf01tcqMVHn0uz9Bwxb5mxJFN78k8Uav5D58BGKQ='; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <title>SPGI — Reporte Quant Lab</title>
 <style>
@@ -117,11 +117,15 @@
     padding: 1.5rem; border-top: 1px solid var(--surface-2);
   }
   footer strong { color: var(--text); }
-  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  /* El contenido es visible por defecto: si el script no corre, por lo que
+     sea (bloqueado, un error, JS desactivado), nunca desaparece. Solo se
+     "pre-esconde" para animar cuando el propio script confirma que arrancó
+     (clase .js-ready en <html>, puesta como primera línea del script). */
+  .js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   .reveal.is-visible { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    .reveal { opacity: 1; transform: none; transition: none; }
+    .js-ready .reveal { opacity: 1; transform: none; transition: none; }
     .card { transition: none; }
     #scroll-progress { transition: none; }
   }
@@ -139,7 +143,7 @@
         <span class="pill">🚫 Nunca "compra" ni "vende"</span>
       </div>
       <h1>SPGI</h1>
-      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:41 UTC</p>
+      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:44 UTC</p>
       <a class="hero-cta" href="#como-funciona">¿Cómo sé que esto es confiable? ↓</a>
     </div>
   </header>
@@ -340,6 +344,11 @@
   </footer>
   <script>(function () {
   "use strict";
+  // Primera línea a propósito: recién ahora es seguro "pre-esconder" el
+  // contenido para animarlo. Si el script nunca llega a correr (CSP, un
+  // error, lo que sea), esta clase nunca se agrega y todo se queda visible
+  // por el valor por defecto del CSS.
+  document.documentElement.classList.add("js-ready");
   var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var progress = document.getElementById("scroll-progress");

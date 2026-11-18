@@ -182,3 +182,29 @@ def test_inline_script_has_no_syntax_errors():
         input=script_match.group(1), capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_reveal_content_is_visible_by_default_without_javascript():
+    """Defensa en profundidad: si el script no corre por CUALQUIER motivo
+    (no solo el de la prueba anterior), el contenido .reveal nunca debe
+    depender de JS para mostrarse. Solo se "pre-esconde" bajo `.js-ready`,
+    una clase que el propio script agrega como primera línea; sin JS, esa
+    clase nunca existe y el valor por defecto del CSS es visible."""
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr,
+    )
+    style_match = re.search(r"<style>(.*?)</style>", html, re.DOTALL)
+    assert style_match
+    css = style_match.group(1)
+    # Ninguna línea cuyo selector EMPIECE en ".reveal" (bare, sin ".js-ready"
+    # antes) puede esconderlo (opacity: 0) — eso sería volver al bug original.
+    bare_hidden_rules = [
+        line for line in css.splitlines()
+        if re.match(r"\s*\.reveal\s*\{", line) and "opacity: 0" in line
+    ]
+    assert not bare_hidden_rules, f"`.reveal` se esconde sin `.js-ready` por delante: {bare_hidden_rules}"
+    assert ".js-ready .reveal" in css
+    assert 'classList.add("js-ready")' in html

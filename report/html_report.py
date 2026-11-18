@@ -46,6 +46,11 @@ _REPO_URL = "https://github.com/Hsoja/quant-lab"
 # "cualquier script inline" ('unsafe-inline' sí lo permitiría).
 _SCRIPT = """(function () {
   "use strict";
+  // Primera línea a propósito: recién ahora es seguro "pre-esconder" el
+  // contenido para animarlo. Si el script nunca llega a correr (CSP, un
+  // error, lo que sea), esta clase nunca se agrega y todo se queda visible
+  // por el valor por defecto del CSS.
+  document.documentElement.classList.add("js-ready");
   var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var progress = document.getElementById("scroll-progress");
@@ -233,11 +238,15 @@ _STYLE = """
     padding: 1.5rem; border-top: 1px solid var(--surface-2);
   }
   footer strong { color: var(--text); }
-  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  /* El contenido es visible por defecto: si el script no corre, por lo que
+     sea (bloqueado, un error, JS desactivado), nunca desaparece. Solo se
+     "pre-esconde" para animar cuando el propio script confirma que arrancó
+     (clase .js-ready en <html>, puesta como primera línea del script). */
+  .js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   .reveal.is-visible { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
-    .reveal { opacity: 1; transform: none; transition: none; }
+    .js-ready .reveal { opacity: 1; transform: none; transition: none; }
     .card { transition: none; }
     #scroll-progress { transition: none; }
   }
