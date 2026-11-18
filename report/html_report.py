@@ -11,10 +11,13 @@ Reglas de seguridad (skill frontend-seguro) aplicadas:
   el proyecto trata como dato no confiable (nunca como instrucción).
 - CSP estricta vía `<meta>`: sin scripts externos, sin fuentes externas,
   sin `eval`/`Function`/`innerHTML`. El único `<script>` usa
-  `textContent`/`addEventListener`, nunca HTML armado a mano. El único
-  enlace a `https://` que existe en la página es, a propósito, al propio
-  código fuente en GitHub (navegación que decide la persona, no una carga
-  automática de un recurso de terceros) y lleva `rel="noopener noreferrer"`.
+  `textContent`/`addEventListener`, nunca HTML armado a mano, y su
+  `script-src` se permite por **hash SHA-256 del contenido exacto**
+  (`'sha256-...'`), no por `'unsafe-inline'`: solo ese script, byte a byte,
+  puede ejecutarse. El único enlace a `https://` que existe en la página es,
+  a propósito, al propio código fuente en GitHub (navegación que decide la
+  persona, no una carga automática de un recurso de terceros) y lleva
+  `rel="noopener noreferrer"`.
 - Nunca sugiere comprar ni vender; mismo pie de no asesoría que el Markdown
   de `report/report.py`, cuyo catálogo de conceptos reutiliza (una sola
   fuente de verdad sobre qué cifras existen y en qué orden).
@@ -24,6 +27,8 @@ Reglas de seguridad (skill frontend-seguro) aplicadas:
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html as _html
 from datetime import datetime, timezone
 
@@ -31,17 +36,212 @@ from calc.fcf import CagrResult, FcfResult
 from extract.facts import CitedValue
 from report.report import DISCLAIMER, _DISPLAY_ORDER
 
+_REPO_URL = "https://github.com/Hsoja/quant-lab"
+
+# El único <script> de la página, como texto plano (sin f-string: así sus
+# propias llaves de JS no necesitan escaparse por duplicado). Como la página
+# es estática, un nonce no serviría de nada (sería el mismo siempre, visible
+# en el propio HTML); en cambio, un hash SHA-256 del contenido exacto SÍ es
+# una restricción real: solo este script, byte a byte, puede ejecutarse — no
+# "cualquier script inline" ('unsafe-inline' sí lo permitiría).
+_SCRIPT = """(function () {
+  "use strict";
+  var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var progress = document.getElementById("scroll-progress");
+  function updateProgress() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
+    progress.style.width = pct + "%";
+  }
+  window.addEventListener("scroll", updateProgress, { passive: true });
+  updateProgress();
+
+  function animateCount(el) {
+    var raw = el.getAttribute("data-count");
+    if (raw === null) return;
+    var target = parseFloat(raw);
+    if (isNaN(target)) return;
+    var suffix = el.getAttribute("data-suffix") || "";
+    var isMoney = suffix === "";
+    if (prefersReduced) return; // el texto final ya está en el DOM, no hace falta animar
+    var start = null;
+    var duration = 900;
+    function step(ts) {
+      if (start === null) start = ts;
+      var progressRatio = Math.min((ts - start) / duration, 1);
+      var current = target * progressRatio;
+      if (isMoney) {
+        el.textContent = "US$ " + Math.round(current).toLocaleString("en-US");
+      } else {
+        el.textContent = (current >= 0 ? "+" : "") + current.toFixed(2) + suffix;
+      }
+      if (progressRatio < 1) {
+        window.requestAnimationFrame(step);
+      } else if (isMoney) {
+        el.textContent = "US$ " + Math.round(target).toLocaleString("en-US");
+      }
+    }
+    window.requestAnimationFrame(step);
+  }
+
+  var items = document.querySelectorAll(".reveal");
+  if (prefersReduced || !("IntersectionObserver" in window)) {
+    items.forEach(function (el) { el.classList.add("is-visible"); });
+    return;
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("is-visible");
+        var counter = entry.target.querySelector("[data-count]");
+        if (counter) animateCount(counter);
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.15 });
+  items.forEach(function (el) { observer.observe(el); });
+})();"""
+
+
+def _sha256_b64(text: str) -> str:
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
+_SCRIPT_HASH = _sha256_b64(_SCRIPT)
+
 _CSP = (
     "default-src 'none'; "
     "style-src 'self' 'unsafe-inline'; "
-    "script-src 'self'; "
+    f"script-src 'self' 'sha256-{_SCRIPT_HASH}'; "
     "img-src 'self'; "
     "base-uri 'none'; "
     "form-action 'none'; "
     "frame-ancestors 'none'"
 )
 
-_REPO_URL = "https://github.com/Hsoja/quant-lab"
+_STYLE = """
+  :root {
+    --bg: #ffffff;
+    --surface: #eef5ff;
+    --surface-2: #dbeafe;
+    --accent: #2563eb;
+    --accent-2: #38bdf8;
+    --accent-dark: #1e40af;
+    --text: #0f172a;
+    --muted: #51607a;
+    --warn-bg: #fff7ed;
+    --warn-border: #f59e0b;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--accent-dark); }
+  #scroll-progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    z-index: 50; transition: width .1s linear;
+  }
+  .hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #ffffff; padding: 3rem 1.5rem 3.5rem;
+  }
+  .hero-blob {
+    position: absolute; inset: -40% -10% auto auto; width: 60vw; height: 60vw; max-width: 640px; max-height: 640px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 60%);
+    border-radius: 50%; pointer-events: none;
+  }
+  .hero-inner { position: relative; max-width: 960px; margin: 0 auto; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
+  .pill {
+    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    padding: .3rem .75rem; border-radius: 999px; font-size: .78rem; backdrop-filter: blur(4px);
+  }
+  .hero h1 { margin: 0 0 .35rem; font-size: 2rem; }
+  .hero-sub { margin: 0 0 1.25rem; opacity: .92; font-size: .95rem; }
+  .hero-cta {
+    display: inline-block; color: #ffffff; text-decoration: none; font-weight: 600;
+    border-bottom: 2px solid rgba(255,255,255,.6); padding-bottom: 2px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
+  section { margin-bottom: 2.5rem; }
+  h2 { color: var(--accent-dark); font-size: 1.25rem; }
+  .section-intro { color: var(--muted); margin-top: -.5rem; }
+  .risk {
+    background: var(--warn-bg); border-left: 4px solid var(--warn-border);
+    border-radius: var(--radius); padding: 1.25rem 1.5rem;
+  }
+  .risk ul { margin: .5rem 0; padding-left: 1.25rem; }
+  .risk-note { color: var(--muted); font-size: .9rem; }
+
+  .pipeline-track { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }
+  .step {
+    flex: 1 1 160px; background: var(--surface); border: 1px solid var(--surface-2);
+    border-radius: var(--radius); padding: 1.1rem; text-align: center;
+  }
+  .step-icon { font-size: 1.6rem; margin-bottom: .4rem; }
+  .step h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--accent-dark); }
+  .step p { margin: 0; font-size: .82rem; color: var(--muted); }
+  .step-arrow { align-self: center; color: var(--accent); font-size: 1.3rem; flex: 0 0 auto; }
+  @media (max-width: 720px) { .step-arrow { transform: rotate(90deg); } }
+
+  .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+  .trust-card { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.1rem; }
+  .trust-icon { font-size: 1.5rem; margin-bottom: .3rem; }
+  .trust-card h3 { margin: 0 0 .3rem; font-size: .95rem; }
+  .trust-card p { margin: 0; font-size: .85rem; color: var(--muted); }
+  .trust-link { text-align: center; font-size: .9rem; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius);
+    padding: 1rem 1.1rem; transition: transform .2s ease, box-shadow .2s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px -12px rgba(37,99,235,.35); }
+  .card-head { display: flex; align-items: center; gap: .5rem; }
+  .card-head h3 { margin: 0; font-size: .92rem; color: var(--text); flex: 1; }
+  .card-icon { font-size: 1.1rem; }
+  .card-value { font-size: 1.5rem; font-weight: 700; margin: .5rem 0; color: var(--accent-dark); }
+  .card-note { color: var(--muted); font-size: .85rem; margin: 0; }
+  .card-detail summary { cursor: pointer; color: var(--accent-dark); font-size: .85rem; }
+  .card-detail summary:focus-visible, a:focus-visible, button:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  .card-detail div { font-size: .85rem; color: var(--muted); margin-top: .4rem; }
+  .card-detail blockquote {
+    margin: .4rem 0 0; padding: .5rem .75rem; background: #ffffff;
+    border-left: 3px solid var(--accent); border-radius: 6px; font-style: italic;
+  }
+  .badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .badge-ok { background: #dcfce7; color: #166534; }
+  .badge-info { background: #dbeafe; color: #1e40af; }
+  .badge-warn { background: #fef3c7; color: #92400e; }
+  .cambios-body { white-space: pre-line; }
+  footer {
+    text-align: center; color: var(--muted); font-size: .85rem;
+    padding: 1.5rem; border-top: 1px solid var(--surface-2);
+  }
+  footer strong { color: var(--text); }
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.is-visible { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .card { transition: none; }
+    #scroll-progress { transition: none; }
+  }
+"""
 
 _CONCEPT_ICONS = {
     "revenue": "💰",
@@ -302,126 +502,7 @@ def build_html_report(
 <meta http-equiv="Content-Security-Policy" content="{_CSP}">
 <meta name="referrer" content="no-referrer">
 <title>{_esc(empresa_ejemplo)} — Reporte Quant Lab</title>
-<style>
-  :root {{
-    --bg: #ffffff;
-    --surface: #eef5ff;
-    --surface-2: #dbeafe;
-    --accent: #2563eb;
-    --accent-2: #38bdf8;
-    --accent-dark: #1e40af;
-    --text: #0f172a;
-    --muted: #51607a;
-    --warn-bg: #fff7ed;
-    --warn-border: #f59e0b;
-    --radius: 16px;
-  }}
-  * {{ box-sizing: border-box; }}
-  html {{ scroll-behavior: smooth; }}
-  body {{
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.55;
-  }}
-  a {{ color: var(--accent-dark); }}
-  #scroll-progress {{
-    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
-    background: linear-gradient(90deg, var(--accent), var(--accent-2));
-    z-index: 50; transition: width .1s linear;
-  }}
-  .hero {{
-    position: relative; overflow: hidden;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-    color: #ffffff; padding: 3rem 1.5rem 3.5rem;
-  }}
-  .hero-blob {{
-    position: absolute; inset: -40% -10% auto auto; width: 60vw; height: 60vw; max-width: 640px; max-height: 640px;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 60%);
-    border-radius: 50%; pointer-events: none;
-  }}
-  .hero-inner {{ position: relative; max-width: 960px; margin: 0 auto; }}
-  .pill-row {{ display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }}
-  .pill {{
-    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
-    padding: .3rem .75rem; border-radius: 999px; font-size: .78rem; backdrop-filter: blur(4px);
-  }}
-  .hero h1 {{ margin: 0 0 .35rem; font-size: 2rem; }}
-  .hero-sub {{ margin: 0 0 1.25rem; opacity: .92; font-size: .95rem; }}
-  .hero-cta {{
-    display: inline-block; color: #ffffff; text-decoration: none; font-weight: 600;
-    border-bottom: 2px solid rgba(255,255,255,.6); padding-bottom: 2px;
-  }}
-  main {{ max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 1rem; }}
-  section {{ margin-bottom: 2.5rem; }}
-  h2 {{ color: var(--accent-dark); font-size: 1.25rem; }}
-  .section-intro {{ color: var(--muted); margin-top: -.5rem; }}
-  .risk {{
-    background: var(--warn-bg); border-left: 4px solid var(--warn-border);
-    border-radius: var(--radius); padding: 1.25rem 1.5rem;
-  }}
-  .risk ul {{ margin: .5rem 0; padding-left: 1.25rem; }}
-  .risk-note {{ color: var(--muted); font-size: .9rem; }}
-
-  .pipeline-track {{ display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }}
-  .step {{
-    flex: 1 1 160px; background: var(--surface); border: 1px solid var(--surface-2);
-    border-radius: var(--radius); padding: 1.1rem; text-align: center;
-  }}
-  .step-icon {{ font-size: 1.6rem; margin-bottom: .4rem; }}
-  .step h3 {{ margin: 0 0 .35rem; font-size: .95rem; color: var(--accent-dark); }}
-  .step p {{ margin: 0; font-size: .82rem; color: var(--muted); }}
-  .step-arrow {{ align-self: center; color: var(--accent); font-size: 1.3rem; flex: 0 0 auto; }}
-  @media (max-width: 720px) {{ .step-arrow {{ transform: rotate(90deg); }} }}
-
-  .trust-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }}
-  .trust-card {{ background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.1rem; }}
-  .trust-icon {{ font-size: 1.5rem; margin-bottom: .3rem; }}
-  .trust-card h3 {{ margin: 0 0 .3rem; font-size: .95rem; }}
-  .trust-card p {{ margin: 0; font-size: .85rem; color: var(--muted); }}
-  .trust-link {{ text-align: center; font-size: .9rem; }}
-
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }}
-  .calc-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }}
-  .card {{
-    background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius);
-    padding: 1rem 1.1rem; transition: transform .2s ease, box-shadow .2s ease;
-  }}
-  .card:hover {{ transform: translateY(-3px); box-shadow: 0 10px 24px -12px rgba(37,99,235,.35); }}
-  .card-head {{ display: flex; align-items: center; gap: .5rem; }}
-  .card-head h3 {{ margin: 0; font-size: .92rem; color: var(--text); flex: 1; }}
-  .card-icon {{ font-size: 1.1rem; }}
-  .card-value {{ font-size: 1.5rem; font-weight: 700; margin: .5rem 0; color: var(--accent-dark); }}
-  .card-note {{ color: var(--muted); font-size: .85rem; margin: 0; }}
-  .card-detail summary {{ cursor: pointer; color: var(--accent-dark); font-size: .85rem; }}
-  .card-detail summary:focus-visible, a:focus-visible, button:focus-visible {{
-    outline: 3px solid var(--accent); outline-offset: 2px;
-  }}
-  .card-detail div {{ font-size: .85rem; color: var(--muted); margin-top: .4rem; }}
-  .card-detail blockquote {{
-    margin: .4rem 0 0; padding: .5rem .75rem; background: #ffffff;
-    border-left: 3px solid var(--accent); border-radius: 6px; font-style: italic;
-  }}
-  .badge {{ font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }}
-  .badge-ok {{ background: #dcfce7; color: #166534; }}
-  .badge-info {{ background: #dbeafe; color: #1e40af; }}
-  .badge-warn {{ background: #fef3c7; color: #92400e; }}
-  .cambios-body {{ white-space: pre-line; }}
-  footer {{
-    text-align: center; color: var(--muted); font-size: .85rem;
-    padding: 1.5rem; border-top: 1px solid var(--surface-2);
-  }}
-  footer strong {{ color: var(--text); }}
-  .reveal {{ opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }}
-  .reveal.is-visible {{ opacity: 1; transform: none; }}
-  @media (prefers-reduced-motion: reduce) {{
-    html {{ scroll-behavior: auto; }}
-    .reveal {{ opacity: 1; transform: none; transition: none; }}
-    .card {{ transition: none; }}
-    #scroll-progress {{ transition: none; }}
-  }}
-</style>
+<style>{_STYLE}</style>
 </head>
 <body>
   <div id="scroll-progress"></div>
@@ -446,67 +527,7 @@ def build_html_report(
     <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
     <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
   </footer>
-  <script>
-  (function () {{
-    "use strict";
-    var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    var progress = document.getElementById("scroll-progress");
-    function updateProgress() {{
-      var doc = document.documentElement;
-      var max = doc.scrollHeight - doc.clientHeight;
-      var pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
-      progress.style.width = pct + "%";
-    }}
-    window.addEventListener("scroll", updateProgress, {{ passive: true }});
-    updateProgress();
-
-    function animateCount(el) {{
-      var raw = el.getAttribute("data-count");
-      if (raw === null) return;
-      var target = parseFloat(raw);
-      if (isNaN(target)) return;
-      var suffix = el.getAttribute("data-suffix") || "";
-      var isMoney = suffix === "";
-      if (prefersReduced) return; // el texto final ya está en el DOM, no hace falta animar
-      var start = null;
-      var duration = 900;
-      function step(ts) {{
-        if (start === null) start = ts;
-        var progressRatio = Math.min((ts - start) / duration, 1);
-        var current = target * progressRatio;
-        if (isMoney) {{
-          el.textContent = "US$ " + Math.round(current).toLocaleString("en-US");
-        }} else {{
-          el.textContent = (current >= 0 ? "+" : "") + current.toFixed(2) + suffix;
-        }}
-        if (progressRatio < 1) {{
-          window.requestAnimationFrame(step);
-        }} else if (isMoney) {{
-          el.textContent = "US$ " + Math.round(target).toLocaleString("en-US");
-        }}
-      }}
-      window.requestAnimationFrame(step);
-    }}
-
-    var items = document.querySelectorAll(".reveal");
-    if (prefersReduced || !("IntersectionObserver" in window)) {{
-      items.forEach(function (el) {{ el.classList.add("is-visible"); }});
-      return;
-    }}
-    var observer = new IntersectionObserver(function (entries) {{
-      entries.forEach(function (entry) {{
-        if (entry.isIntersecting) {{
-          entry.target.classList.add("is-visible");
-          var counter = entry.target.querySelector("[data-count]");
-          if (counter) animateCount(counter);
-          observer.unobserve(entry.target);
-        }}
-      }});
-    }}, {{ threshold: 0.15 }});
-    items.forEach(function (el) {{ observer.observe(el); }});
-  }})();
-  </script>
+  <script>{_SCRIPT}</script>
 </body>
 </html>
 """

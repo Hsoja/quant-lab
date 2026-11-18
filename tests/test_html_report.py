@@ -1,3 +1,11 @@
+import base64
+import hashlib
+import re
+import shutil
+import subprocess
+
+import pytest
+
 from calc.fcf import CagrResult, FcfResult
 from extract.facts import Citation, CitedValue
 from report.html_report import build_html_report
@@ -123,3 +131,54 @@ def test_html_report_respects_prefers_reduced_motion():
         verified=verified, fcf=fcf, cagr=cagr,
     )
     assert "prefers-reduced-motion" in html
+
+
+def test_inline_script_is_allowed_by_its_own_csp():
+    """Caso real que pasó: la CSP decía `script-src 'self'` sin permitir el
+    <script> inline de la propia página. El navegador lo bloqueaba en
+    silencio (sin error visible) y TODO el contenido con clase `.reveal`
+    (riesgo, pasos, tarjetas, confianza) se quedaba en opacity:0 para
+    siempre, porque el script que agrega `.is-visible` nunca llegaba a
+    correr. Esta prueba recalcula, igual que haría un navegador, el hash
+    SHA-256 del <script> tal como quedó en el HTML y confirma que SÍ está
+    en la lista de permitidos de la CSP."""
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr,
+    )
+    script_match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
+    assert script_match, "no se encontró el <script> de la página"
+    digest = base64.b64encode(hashlib.sha256(script_match.group(1).encode("utf-8")).digest()).decode("ascii")
+
+    csp_match = re.search(r'Content-Security-Policy" content="([^"]+)"', html)
+    assert csp_match, "no se encontró la Content-Security-Policy"
+    csp = csp_match.group(1)
+
+    assert f"sha256-{digest}" in csp, (
+        "el script-src de la CSP no permite este <script> exacto: "
+        "el navegador lo bloquearía y la página se quedaría en blanco"
+    )
+    assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0], (
+        "no debe depender de 'unsafe-inline' para scripts: el hash es la protección real"
+    )
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node no está disponible en este entorno")
+def test_inline_script_has_no_syntax_errors():
+    """Confirma, con un intérprete de JS de verdad, que el <script> no tiene
+    errores de sintaxis — una prueba de texto no lo detectaría."""
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr,
+    )
+    script_match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
+    assert script_match
+    result = subprocess.run(
+        ["node", "--check", "/dev/stdin"],
+        input=script_match.group(1), capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
