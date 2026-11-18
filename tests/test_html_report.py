@@ -79,9 +79,16 @@ def test_html_report_has_strict_csp_and_no_external_resources():
     )
     assert "Content-Security-Policy" in html
     assert "default-src 'none'" in html
-    assert "http://" not in html and "https://" not in html
+    # No se carga ningún recurso de terceros (scripts, estilos, imágenes, fuentes):
+    # ni <script src=, ni <link ... href=, ni fuentes de CDN o de Google Fonts.
+    assert "<script src=" not in html.lower()
+    assert "<link " not in html.lower()
     assert "cdn." not in html.lower()
     assert "fonts.googleapis" not in html.lower()
+    # El único enlace a https:// permitido es la navegación, decidida por la persona,
+    # al propio repositorio del proyecto — nunca una carga automática de un recurso.
+    http_links = [line for line in html.splitlines() if "http://" in line or "https://" in line]
+    assert all("github.com/Hsoja/quant-lab" in line and 'rel="noopener noreferrer"' in line for line in http_links)
 
 
 def test_html_report_has_no_dangerous_js_patterns():

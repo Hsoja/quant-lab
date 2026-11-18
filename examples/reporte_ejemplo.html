@@ -12,51 +12,91 @@
     --surface: #eef5ff;
     --surface-2: #dbeafe;
     --accent: #2563eb;
+    --accent-2: #38bdf8;
     --accent-dark: #1e40af;
     --text: #0f172a;
     --muted: #51607a;
     --warn-bg: #fff7ed;
     --warn-border: #f59e0b;
-    --radius: 14px;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     margin: 0;
     background: var(--bg);
     color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.5;
+    line-height: 1.55;
   }
   a { color: var(--accent-dark); }
-  header.top {
-    background: linear-gradient(135deg, var(--accent) 0%, #60a5fa 100%);
-    color: #ffffff;
-    padding: 2rem 1.5rem;
+  #scroll-progress {
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    z-index: 50; transition: width .1s linear;
   }
-  header.top h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
-  header.top p { margin: 0; opacity: .9; font-size: .9rem; }
-  main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
-  section { margin-bottom: 1.75rem; }
-  h2 { color: var(--accent-dark); font-size: 1.15rem; }
+  .hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: #ffffff; padding: 3rem 1.5rem 3.5rem;
+  }
+  .hero-blob {
+    position: absolute; inset: -40% -10% auto auto; width: 60vw; height: 60vw; max-width: 640px; max-height: 640px;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), transparent 60%);
+    border-radius: 50%; pointer-events: none;
+  }
+  .hero-inner { position: relative; max-width: 960px; margin: 0 auto; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
+  .pill {
+    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
+    padding: .3rem .75rem; border-radius: 999px; font-size: .78rem; backdrop-filter: blur(4px);
+  }
+  .hero h1 { margin: 0 0 .35rem; font-size: 2rem; }
+  .hero-sub { margin: 0 0 1.25rem; opacity: .92; font-size: .95rem; }
+  .hero-cta {
+    display: inline-block; color: #ffffff; text-decoration: none; font-weight: 600;
+    border-bottom: 2px solid rgba(255,255,255,.6); padding-bottom: 2px;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
+  section { margin-bottom: 2.5rem; }
+  h2 { color: var(--accent-dark); font-size: 1.25rem; }
+  .section-intro { color: var(--muted); margin-top: -.5rem; }
   .risk {
-    background: var(--warn-bg);
-    border-left: 4px solid var(--warn-border);
-    border-radius: var(--radius);
-    padding: 1.25rem 1.5rem;
+    background: var(--warn-bg); border-left: 4px solid var(--warn-border);
+    border-radius: var(--radius); padding: 1.25rem 1.5rem;
   }
   .risk ul { margin: .5rem 0; padding-left: 1.25rem; }
   .risk-note { color: var(--muted); font-size: .9rem; }
+
+  .pipeline-track { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }
+  .step {
+    flex: 1 1 160px; background: var(--surface); border: 1px solid var(--surface-2);
+    border-radius: var(--radius); padding: 1.1rem; text-align: center;
+  }
+  .step-icon { font-size: 1.6rem; margin-bottom: .4rem; }
+  .step h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--accent-dark); }
+  .step p { margin: 0; font-size: .82rem; color: var(--muted); }
+  .step-arrow { align-self: center; color: var(--accent); font-size: 1.3rem; flex: 0 0 auto; }
+  @media (max-width: 720px) { .step-arrow { transform: rotate(90deg); } }
+
+  .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+  .trust-card { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.1rem; }
+  .trust-icon { font-size: 1.5rem; margin-bottom: .3rem; }
+  .trust-card h3 { margin: 0 0 .3rem; font-size: .95rem; }
+  .trust-card p { margin: 0; font-size: .85rem; color: var(--muted); }
+  .trust-link { text-align: center; font-size: .9rem; }
+
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
   .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
   .card {
-    background: var(--surface);
-    border: 1px solid var(--surface-2);
-    border-radius: var(--radius);
-    padding: 1rem 1.1rem;
+    background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius);
+    padding: 1rem 1.1rem; transition: transform .2s ease, box-shadow .2s ease;
   }
-  .card-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
-  .card h3 { margin: 0; font-size: .95rem; color: var(--text); }
-  .card-value { font-size: 1.5rem; font-weight: 700; margin: .4rem 0; color: var(--accent-dark); }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px -12px rgba(37,99,235,.35); }
+  .card-head { display: flex; align-items: center; gap: .5rem; }
+  .card-head h3 { margin: 0; font-size: .92rem; color: var(--text); flex: 1; }
+  .card-icon { font-size: 1.1rem; }
+  .card-value { font-size: 1.5rem; font-weight: 700; margin: .5rem 0; color: var(--accent-dark); }
   .card-note { color: var(--muted); font-size: .85rem; margin: 0; }
   .card-detail summary { cursor: pointer; color: var(--accent-dark); font-size: .85rem; }
   .card-detail summary:focus-visible, a:focus-visible, button:focus-visible {
@@ -77,17 +117,31 @@
     padding: 1.5rem; border-top: 1px solid var(--surface-2);
   }
   footer strong { color: var(--text); }
-  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   .reveal.is-visible { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
     .reveal { opacity: 1; transform: none; transition: none; }
+    .card { transition: none; }
+    #scroll-progress { transition: none; }
   }
 </style>
 </head>
 <body>
-  <header class="top">
-    <h1>SPGI</h1>
-    <p>Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 04:58 UTC</p>
+  <div id="scroll-progress"></div>
+  
+  <header class="hero">
+    <div class="hero-blob" aria-hidden="true"></div>
+    <div class="hero-inner">
+      <div class="pill-row">
+        <span class="pill">✅ Cada cifra citada o marcada "no verificado"</span>
+        <span class="pill">🔒 Sin backend · sin tus datos</span>
+        <span class="pill">🚫 Nunca "compra" ni "vende"</span>
+      </div>
+      <h1>SPGI</h1>
+      <p class="hero-sub">Reporte de CIK0000064040-0000064040-26-000013 · generado 2026-11-18 13:08 UTC</p>
+      <a class="hero-cta" href="#como-funciona">¿Cómo sé que esto es confiable? ↓</a>
+    </div>
   </header>
   <main>
     
@@ -98,88 +152,135 @@
       <p class="risk-note">Este reporte describe lo que dice el documento oficial citado abajo;
       no es una tesis de inversión completa y no sustituye leer el reporte completo.</p>
     </section>
+    
+    <section class="pipeline" id="como-funciona" aria-labelledby="pipeline-title">
+      <h2 id="pipeline-title">🔬 Cómo se verifica cada cifra</h2>
+      <p class="section-intro">Cinco pasos, en este orden a propósito, antes de que algo llegue a esta
+      página:</p>
+      <div class="pipeline-track">
+        <div class="step reveal" style="transition-delay:0ms">
+          <div class="step-icon" aria-hidden="true">📥</div>
+          <h3>Ingesta</h3>
+          <p>Se descarga el documento oficial y se guarda con su huella digital (hash). Esa huella es la identidad del documento para todo lo que sigue: si cambia un solo carácter, la huella cambia y se nota.</p>
+        </div>
+        <span class="step-arrow" aria-hidden="true">→</span>
+        <div class="step reveal" style="transition-delay:90ms">
+          <div class="step-icon" aria-hidden="true">🔍</div>
+          <h3>Extracción</h3>
+          <p>Cada cifra se busca en los datos estructurados del propio documento (XBRL en línea) y se localiza su frase exacta ahí mismo — nunca se copia de un resumen ni se inventa.</p>
+        </div>
+        <span class="step-arrow" aria-hidden="true">→</span>
+        <div class="step reveal" style="transition-delay:180ms">
+          <div class="step-icon" aria-hidden="true">🛡️</div>
+          <h3>Verificación</h3>
+          <p>Un verificador independiente vuelve a abrir el documento guardado y confirma que cada frase exista ahí, literal. Si no existe, se descarta — esto pasa antes de que cualquier modelo de lenguaje intervenga.</p>
+        </div>
+        <span class="step-arrow" aria-hidden="true">→</span>
+        <div class="step reveal" style="transition-delay:270ms">
+          <div class="step-icon" aria-hidden="true">🤖</div>
+          <h3>Resumen (IA)</h3>
+          <p>El modelo redacta a partir de las cifras YA verificadas — nunca lee el documento original. Así, nada escondido en el documento puede influir en lo que escribe.</p>
+        </div>
+        <span class="step-arrow" aria-hidden="true">→</span>
+        <div class="step reveal" style="transition-delay:360ms">
+          <div class="step-icon" aria-hidden="true">📄</div>
+          <h3>Reporte</h3>
+          <p>El riesgo y las limitaciones se muestran primero, luego cada cifra con su fuente. Nunca una recomendación de compra o venta.</p>
+        </div>
+        
+      </div>
+    </section>
     <section aria-label="Cifras con fuente">
       <h2>📊 Cifras con fuente</h2>
+      <p class="section-intro">Cada tarjeta dice si la cifra está citada, es derivada de otras, o no se pudo verificar.</p>
       <div class="grid">
-      <article class="card reveal" data-key="revenue">
+      <article class="card reveal" style="transition-delay:0ms" data-key="revenue">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">💰</span>
           <h3>Ingresos</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 15,336,000,000</p>
+        <p class="card-value" data-count="15336000000.0">US$ 15,336,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>ts of Income                                            (in millions, except per share data)  Year Ended December 31,       2025    2024    2023    Revenue  $  15,336</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="operating_income">
+      <article class="card reveal" style="transition-delay:60ms" data-key="operating_income">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">⚙️</span>
           <h3>Utilidad operativa</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 6,478,000,000</p>
+        <p class="card-value" data-count="6478000000.0">US$ 6,478,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>n dispositions, net   ( 273 )      ( 59 )      70       Equity in income on unconsolidated subsidiaries   ( 28 )      ( 43 )      ( 36 )      Operating profit  6,478</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="depreciation_amortization">
+      <article class="card reveal" style="transition-delay:120ms" data-key="depreciation_amortization">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">📉</span>
           <h3>Depreciación y amortización</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 1,179,000,000</p>
+        <p class="card-value" data-count="1179000000.0">US$ 1,179,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Estado de flujo de efectivo<blockquote>reportable segments  1,164       1,160       1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="ebitda">
+      <article class="card reveal" style="transition-delay:180ms" data-key="ebitda">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">⚡</span>
           <h3>EBITDA (derivado)</h3>
           <span class="badge badge-info">derivado</span>
         </header>
-        <p class="card-value">US$ 7,657,000,000</p>
+        <p class="card-value" data-count="7657000000.0">US$ 7,657,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>EBITDA = utilidad operativa + depreciación y amortización (SPEC.md 4.1).</div>
         </details>
       </article>
-      <article class="card reveal" data-key="income_tax_expense">
+      <article class="card reveal" style="transition-delay:240ms" data-key="income_tax_expense">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">🏛️</span>
           <h3>Gasto por impuestos (devengado)</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 1,407,000,000</p>
+        <p class="card-value" data-count="1407000000.0">US$ 1,407,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Estado de resultados<blockquote>est expense, net  287       297       334                     Income before taxes on income  6,227       5,308       3,671       Provision for taxes on income  1,407</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="income_tax_paid">
+      <article class="card reveal" style="transition-delay:300ms" data-key="income_tax_paid">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">🧾</span>
           <h3>Impuestos pagados en efectivo (referencia)</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 1,502,000,000</p>
+        <p class="card-value" data-count="1502000000.0">US$ 1,502,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Notas al estado de flujo de efectivo<blockquote>ear  $  1,745       $  1,666       $  1,291       Cash paid during the year for:              Interest  $  390       $  391       $  369       Income taxes  $  1,502</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="capex">
+      <article class="card reveal" style="transition-delay:360ms" data-key="capex">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">🏗️</span>
           <h3>CAPEX</h3>
           <span class="badge badge-ok">citado</span>
         </header>
-        <p class="card-value">US$ 195,000,000</p>
+        <p class="card-value" data-count="195000000.0">US$ 195,000,000</p>
         <details class="card-detail">
           <summary>Ver fuente</summary>
           <div>CIK0000064040-0000064040-26-000013 · Estado de flujo de efectivo / nota de propiedad, planta y equipo<blockquote>1,129       185       118       139       Corporate  15       13       14       10       6       4       Total  $  1,179       $  1,173       $  1,143       $  195</blockquote></div>
         </details>
       </article>
-      <article class="card reveal" data-key="working_capital_change">
+      <article class="card reveal" style="transition-delay:360ms" data-key="working_capital_change">
         <header class="card-head">
+          <span class="card-icon" aria-hidden="true">🔄</span>
           <h3>Variación de capital de trabajo</h3>
           <span class="badge badge-warn">no verificado</span>
         </header>
@@ -196,18 +297,42 @@
       
     <section class="calc-grid" aria-label="Cálculos">
       <article class="card reveal">
-        <h3>FCF</h3>
+        <header class="card-head"><span class="card-icon" aria-hidden="true">🧮</span><h3>FCF</h3></header>
         <p class="card-value">no verificado</p>
         <p class="card-note">FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto.</p>
       </article>
       <article class="card reveal">
-        <h3>CAGR de ingresos</h3>
-        <p class="card-value">+10.77%</p>
+        <header class="card-head"><span class="card-icon" aria-hidden="true">📈</span><h3>CAGR de ingresos</h3></header>
+        <p class="card-value" data-count="10.770153950216987" data-suffix="%">+10.77%</p>
         <p class="card-note">CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años).</p>
       </article>
     </section>
     </section>
     
+    
+    <section class="trust" aria-labelledby="trust-title">
+      <h2 id="trust-title">🤝 Por qué puedes confiar en esta página</h2>
+      <div class="trust-grid">
+      <div class="trust-card reveal">
+        <div class="trust-icon" aria-hidden="true">🔒</div>
+        <h3>Sin tus datos, nunca</h3>
+        <p>Esta página es un archivo estático: no hay servidor, no hay formularios, no se guarda nada en tu navegador. Solo muestra cifras públicas de una empresa de ejemplo.</p>
+      </div>
+      <div class="trust-card reveal">
+        <div class="trust-icon" aria-hidden="true">🚫</div>
+        <h3>Nunca una orden de compra o venta</h3>
+        <p>El objetivo es mostrar de dónde sale cada número, no decirte qué hacer con tu dinero. Eso siempre lo decides tú, con tu propio criterio.</p>
+      </div>
+      <div class="trust-card reveal">
+        <div class="trust-icon" aria-hidden="true">🧩</div>
+        <h3>Código abierto y verificable</h3>
+        <p>Las reglas de este sistema (qué se cita, cómo se calcula cada cifra, cómo se verifica) están escritas y versionadas — no son una caja negra.</p>
+      </div>
+      </div>
+      <p class="trust-link">
+        <a href="https://github.com/Hsoja/quant-lab" target="_blank" rel="noopener noreferrer">Ver las reglas y el código fuente completos ↗</a>
+      </p>
+    </section>
   </main>
   <footer>
     <p><strong>Análisis informativo, no asesoría financiera.</strong></p>
@@ -217,6 +342,45 @@
   (function () {
     "use strict";
     var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    var progress = document.getElementById("scroll-progress");
+    function updateProgress() {
+      var doc = document.documentElement;
+      var max = doc.scrollHeight - doc.clientHeight;
+      var pct = max > 0 ? (doc.scrollTop / max) * 100 : 0;
+      progress.style.width = pct + "%";
+    }
+    window.addEventListener("scroll", updateProgress, { passive: true });
+    updateProgress();
+
+    function animateCount(el) {
+      var raw = el.getAttribute("data-count");
+      if (raw === null) return;
+      var target = parseFloat(raw);
+      if (isNaN(target)) return;
+      var suffix = el.getAttribute("data-suffix") || "";
+      var isMoney = suffix === "";
+      if (prefersReduced) return; // el texto final ya está en el DOM, no hace falta animar
+      var start = null;
+      var duration = 900;
+      function step(ts) {
+        if (start === null) start = ts;
+        var progressRatio = Math.min((ts - start) / duration, 1);
+        var current = target * progressRatio;
+        if (isMoney) {
+          el.textContent = "US$ " + Math.round(current).toLocaleString("en-US");
+        } else {
+          el.textContent = (current >= 0 ? "+" : "") + current.toFixed(2) + suffix;
+        }
+        if (progressRatio < 1) {
+          window.requestAnimationFrame(step);
+        } else if (isMoney) {
+          el.textContent = "US$ " + Math.round(target).toLocaleString("en-US");
+        }
+      }
+      window.requestAnimationFrame(step);
+    }
+
     var items = document.querySelectorAll(".reveal");
     if (prefersReduced || !("IntersectionObserver" in window)) {
       items.forEach(function (el) { el.classList.add("is-visible"); });
@@ -226,6 +390,8 @@
       entries.forEach(function (entry) {
         if (entry.isIntersecting) {
           entry.target.classList.add("is-visible");
+          var counter = entry.target.querySelector("[data-count]");
+          if (counter) animateCount(counter);
           observer.unobserve(entry.target);
         }
       });
