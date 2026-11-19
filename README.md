@@ -52,7 +52,8 @@ text, only the JSON of already-verified figures (see `docs/SECURITY.md`).
 
 ## The web page
 
-`report/html_report.py` generates a single self-contained HTML file (white and light blue) from
+`report/html_report.py` generates a single self-contained HTML file (dark, indigo/purple glow —
+updated after explicit design feedback from an earlier white/light-blue look) from
 the same data as the Markdown report. It's static on purpose: no backend, no forms, no
 `localStorage`, no external scripts or fonts. All dynamic text goes through `html.escape` before
 being inserted, and it ships a strict Content-Security-Policy (`default-src 'none'`; the inline

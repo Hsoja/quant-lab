@@ -305,3 +305,7 @@ El enlace al código fuente se movió al pie de página, sin la sección alreded
   gráfica y noticias en vivo de TradingView por iframe (sección 9.7), chat de preguntas ya
   preparadas con tesis y riesgo por empresa (sección 9.6, nunca en vivo, nunca compra/vende), y se
   retiró la sección "Por qué puedes confiar en esta página" (sección 9.8).
+- 2026-11-18 — v1.6. Paleta de colores cambiada de blanco/azul claro a oscura con brillos
+  degradados índigo/morado, a pedido explícito (se compartieron imágenes de referencia de
+  tableros). Cambio puramente visual (CSS): mismas reglas de seguridad, mismo contenido, mismo
+  orden de secciones.
