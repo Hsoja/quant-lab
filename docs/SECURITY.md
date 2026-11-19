@@ -54,7 +54,7 @@ se hicieron con un cambio acotado y explícito:
   las mismas cifras ya verificadas — la página nunca llama a un LLM ni a ningún servidor propio.
 - **Descartado: calcular cualquier ticker en vivo.** Mismo problema: requeriría un backend público
   sin autenticación. La página sigue limitada a las empresas precalculadas.
-- **Hecho: `frame-src https://s.tradingview.com`** (sección 9.7). Es el único cambio real a la CSP
+- **Hecho: `frame-src` solo para TradingView** (sección 9.7; el host pasó a `https://www.tradingview-widget.com` en el diseño v3). Es el único cambio real a la CSP
   en esta fase. Los widgets se embeben como `<iframe sandbox="allow-scripts allow-same-origin
   allow-popups">` — nunca `allow-forms` ni `allow-top-navigation` — y nunca con el script de
   TradingView (que habría exigido abrir `script-src` también). El símbolo se valida con una
@@ -76,3 +76,21 @@ Revisar y ampliar esta tabla en cada fase que añada una superficie nueva.
 - **Hecho: descarga del diario** con `Blob` + `download` (archivo local, sin red).
 - **Hecho: ticker validado** con expresión regular antes de armar la URL de historial en
   `ingest/price.py`. Bandit B311 (`random`) es simulación estadística, no criptografía (`# nosec`).
+
+## Diseño v3 (fondo animado, tipografías, TradingView, asistente)
+
+- **Hecho: tipografías embebidas** como `data:` URI (`font-src data:`); ningún host de fuentes. Las
+  fuentes son OFL (`report/assets/fonts/LICENSES.md`).
+- **Hecho: `frame-src https://www.tradingview-widget.com`.** Mismos iframes con `sandbox`
+  (`allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox`; nunca
+  `allow-forms`, `allow-top-navigation` ni `allow-modals`). La configuración va en el hash de la
+  URL, nunca en un script nuestro ni de ellos. `script-src` no cambia (hash SHA-256 del script).
+- **Hecho: se quitó `frame-ancestors` del `<meta>`**: los navegadores lo ignoran ahí y solo
+  generaba errores en consola. No hay forma de protegerse de ser enmarcada con GitHub Pages.
+- **Hecho: asistente flotante sin red.** Texto libre (máx. 200 caracteres) que solo se compara con
+  palabras clave de respuestas ya escritas; la entrada del usuario se pinta con `textContent`,
+  nunca como HTML. Sin `fetch`, WebSocket ni almacenamiento. La base de respuestas viaja en un
+  atributo `data-kb` escapado con `html.escape`.
+- **Hecho: `<canvas>` decorativo** (fondo y orbe): no procesa ninguna entrada ni dato externo.
+- **Riesgo residual (sin cambio):** el contenido de TradingView lo controla un tercero; está dentro
+  de un iframe aislado y marcado como no verificado.

@@ -114,6 +114,7 @@ def test_html_report_has_strict_csp_and_no_external_resources():
     assert all(
         "Content-Security-Policy" in line
         or "tradingview.com" in line
+        or "tradingview-widget.com" in line
         or "www.w3.org/2000/svg" in line  # identificador de espacio de nombres SVG, no un recurso
         or ("github.com/Hsoja/quant-lab" in line and 'rel="noopener noreferrer"' in line)
         for line in http_links
@@ -434,3 +435,81 @@ console.log(JSON.stringify({ flat: flat.p50, flatSpread: flat.p95 - flat.p5, noi
     assert abs(n["var95"] - max(0, 1000 - n["p5"])) < 1e-9
     assert sum(n["hist"]["bins"]) == 4000
     assert data["same"] and data["diff"]
+
+
+# --- Diseño v3: fuentes embebidas, TradingView, asistente flotante ---------------
+
+
+def test_fonts_are_embedded_as_data_uris_and_csp_allows_only_data_fonts():
+    html = _plain_html()
+    assert html.count("src: url(data:font/woff2;base64,") == 4
+    for family in ("Manrope", "Instrument Serif", "IBM Plex Mono"):
+        assert f'font-family: "{family}"' in html
+    csp = re.search(r'Content-Security-Policy" content="([^"]+)"', html).group(1)
+    assert "font-src data:" in csp
+    assert "fonts.gstatic" not in html and "fonts.googleapis" not in html
+
+
+def test_csp_frame_src_only_allows_the_tradingview_widget_host():
+    html = _plain_html()
+    csp = re.search(r'Content-Security-Policy" content="([^"]+)"', html).group(1)
+    assert "frame-src https://www.tradingview-widget.com;" in csp
+    assert "s.tradingview.com" not in html
+    assert "script-src 'self' 'sha256-" in csp
+
+
+def test_tradingview_widgets_pass_their_config_in_the_url_hash_never_a_script():
+    from report.html_report import _SCRIPT
+
+    assert 'TV_BASE = "https://www.tradingview-widget.com/embed-widget/"' in _SCRIPT
+    assert 'encodeURIComponent(JSON.stringify(config))' in _SCRIPT
+    for widget in ("ticker-tape", "advanced-chart", "symbol-overview", "timeline"):
+        assert f'"{widget}"' in _SCRIPT
+    assert "createElement(\"script\")" not in _SCRIPT and "createElement('script')" not in _SCRIPT
+
+
+def test_floating_bot_is_present_and_declares_it_is_not_live():
+    html = _plain_html()
+    for element_id in ("bot-open", "bot-drawer", "bot-input", "bot-log", "bot-chips", "bot-data"):
+        assert f'id="{element_id}"' in html
+    assert "no es un chat en vivo" in html
+    assert 'data-kb="' in html
+    # Sin red en el asistente: nada de fetch/XHR/WebSocket en el script.
+    from report.html_report import _SCRIPT
+
+    for forbidden in ("WebSocket", "EventSource", "sendBeacon"):
+        assert forbidden not in _SCRIPT
+
+
+def test_bot_knowledge_base_uses_only_report_figures_and_never_recommends():
+    import json
+    from report.html_report import _bot_kb
+
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    kb = _bot_kb("EJEMPLO", "CIK0-0001", verified, fcf, cagr)
+    texts = " ".join(item["respuesta"] for item in kb).lower()
+    assert "us$ 1,100" in texts  # ingreso de la fixture, tomado de verified
+    assert "falta Δwk".lower() in texts  # el motivo real del FCF faltante
+    for forbidden in ("compra esta acción", "vende ahora", "recomendamos comprar"):
+        assert forbidden not in texts
+    assert all({"pregunta", "respuesta", "keywords"} <= set(item) for item in kb)
+    json.dumps(kb)  # serializable
+
+
+def test_bot_data_is_escaped_inside_its_attribute():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo='"><script>alert(1)</script>', filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr,
+    )
+    assert "<script>alert(1)</script>" not in html
+
+
+def test_hero_counts_match_the_verified_figures():
+    html = _plain_html()
+    # fixture: 6 citadas, 1 derivada (EBITDA), 1 sin verificar (capital de trabajo)
+    assert re.search(r"<small>Citadas</small><b>6</b>", html)
+    assert re.search(r"<small>Derivadas</small><b>1</b>", html)
+    assert re.search(r"<small>Sin verificar</small><b>1</b>", html)
