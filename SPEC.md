@@ -309,3 +309,10 @@ El enlace al código fuente se movió al pie de página, sin la sección alreded
   degradados índigo/morado, a pedido explícito (se compartieron imágenes de referencia de
   tableros). Cambio puramente visual (CSS): mismas reglas de seguridad, mismo contenido, mismo
   orden de secciones.
+- 2026-11-18 — v1.7. Sección 11: diseño v2 de la página en dos capas separadas. **Capa A**
+  (hechos verificados: riesgo primero, cifras con cita, cálculos) y **Capa B** (simulación Monte
+  Carlo GBM en el navegador, etiquetada SIMULADO · SIN VALIDAR, sin citas) con una frontera visible
+  entre ambas, más un **diario de decisiones** (copiar/descargar Markdown; no guarda nada). μ y σ
+  salen de cierres diarios históricos (`calc/montecarlo.py`, `scripts/precompute_examples.py`,
+  fuente no oficial); si no hay historial, la página pide supuestos manuales marcados "no
+  verificado". Las probabilidades no están validadas con backtest y la página lo dice.
