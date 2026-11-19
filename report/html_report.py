@@ -1,7 +1,7 @@
 """Página web del reporte (adicional, fuera del alcance original del MVP,
 ver SPEC.md sección 3). Es un único archivo HTML autocontenido y estático:
 no hay backend, no hay formularios, no se guarda nada en el navegador.
-Oscuro, con brillos degradados índigo/morado (cambiado a pedido explícito de
+Diseño v2 (Capa A hechos verificados · Capa B simulación · Diario), oscuro (a pedido explícito de
 un look de tablero más vistoso), animada, y pensada para explicar el sistema de
 verificación (no solo mostrar números) — así alguien que nunca vio el
 proyecto entiende, en un scroll, por qué puede confiar en lo que lee.
@@ -342,6 +342,407 @@ _SCRIPT = """(function () {
     });
   })();
 
+  // --- Motor Monte Carlo (GBM) — Capa B, SIMULADO -------------------------
+  // S[t+1] = S[t] * exp((mu - sigma^2/2) dt + sigma sqrt(dt) Z), dt = 1/252.
+  // Misma fórmula que calc/montecarlo.py. PRNG con semilla (mulberry32): el
+  // mismo conjunto de supuestos y semilla da siempre el mismo resultado.
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function gaussian(rng) {
+    var u = 0;
+    while (u === 0) u = rng();
+    var v = rng();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+  function percentile(sorted, p) {
+    var idx = (sorted.length - 1) * p;
+    var lo = Math.floor(idx);
+    var hi = Math.ceil(idx);
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  }
+  function simulateGBM(p) {
+    var dt = 1 / 252;
+    var drift = (p.mu - (p.sigma * p.sigma) / 2) * dt;
+    var vol = p.sigma * Math.sqrt(dt);
+    var rng = mulberry32(p.seed);
+    var nPoints = Math.min(p.days, 60);
+    var stepIdx = [];
+    for (var i = 0; i <= nPoints; i++) stepIdx.push(Math.round((i * p.days) / nPoints));
+    var series = stepIdx.map(function () { return new Float64Array(p.paths); });
+    var finals = new Float64Array(p.paths);
+    for (var path = 0; path < p.paths; path++) {
+      var logS = Math.log(p.s0);
+      series[0][path] = p.s0;
+      var k = 1;
+      for (var d = 1; d <= p.days; d++) {
+        logS += drift + vol * gaussian(rng);
+        if (d === stepIdx[k]) {
+          series[k][path] = Math.exp(logS);
+          k++;
+        }
+      }
+      finals[path] = Math.exp(logS);
+    }
+    return { params: p, stepIdx: stepIdx, series: series, finals: finals };
+  }
+  function summarize(sim) {
+    var p = sim.params;
+    var scale = p.capital / p.s0;
+    var values = Array.prototype.slice.call(sim.finals).map(function (x) { return x * scale; });
+    values.sort(function (a, b) { return a - b; });
+    var n = values.length;
+    function share(pred) {
+      var c = 0;
+      for (var i = 0; i < n; i++) if (pred(values[i])) c++;
+      return c / n;
+    }
+    var p5 = percentile(values, 0.05);
+    var bands = sim.series.map(function (col) {
+      var s = Array.prototype.slice.call(col).map(function (x) { return x * scale; });
+      s.sort(function (a, b) { return a - b; });
+      return [0.05, 0.25, 0.5, 0.75, 0.95].map(function (q) { return percentile(s, q); });
+    });
+    var lo = percentile(values, 0.01);
+    var hi = percentile(values, 0.99);
+    var nBins = 30;
+    var width = (hi - lo) / nBins || 1;
+    var bins = [];
+    for (var b = 0; b < nBins; b++) bins.push(0);
+    values.forEach(function (v) {
+      var idx = Math.floor((v - lo) / width);
+      if (idx < 0) idx = 0;
+      if (idx >= nBins) idx = nBins - 1;
+      bins[idx]++;
+    });
+    var samplePaths = [];
+    for (var s = 0; s < Math.min(25, p.paths); s++) {
+      samplePaths.push(sim.series.map(function (col) { return col[s] * scale; }));
+    }
+    return {
+      capital: p.capital,
+      pUp: share(function (v) { return v > p.capital; }),
+      pLoss10: share(function (v) { return v < p.capital * 0.9; }),
+      pGain20: share(function (v) { return v > p.capital * 1.2; }),
+      p5: p5,
+      p50: percentile(values, 0.5),
+      p95: percentile(values, 0.95),
+      var95: Math.max(0, p.capital - p5),
+      bands: bands,
+      stepIdx: sim.stepIdx,
+      samplePaths: samplePaths,
+      hist: { lo: lo, width: width, bins: bins }
+    };
+  }
+
+  // --- Panel de simulación (Capa B) y diario de decisiones ----------------
+  // Todo con createElement/createElementNS y textContent; los supuestos se
+  // validan y acotan antes de simular. Nada sale del navegador.
+  (function () {
+    var runBtn = document.getElementById("mc-run");
+    if (!runBtn) return;
+    var NS = "http://www.w3.org/2000/svg";
+    var sourceSel = document.getElementById("mc-source");
+    var fields = {
+      s0: document.getElementById("mc-s0"),
+      mu: document.getElementById("mc-mu"),
+      sigma: document.getElementById("mc-sigma"),
+      days: document.getElementById("mc-days"),
+      paths: document.getElementById("mc-paths"),
+      capital: document.getElementById("mc-capital"),
+      seed: document.getElementById("mc-seed")
+    };
+    var errorEl = document.getElementById("mc-error");
+    var metaEl = document.getElementById("mc-meta");
+    var resultsEl = document.getElementById("mc-results");
+    var lastSummary = null;
+
+    var dataEl = document.getElementById("companies-data");
+    var companies = {};
+    try { companies = JSON.parse((dataEl && dataEl.getAttribute("data-json")) || "{}"); } catch (e) { companies = {}; }
+    Object.keys(companies).sort().forEach(function (ticker) {
+      var mc = companies[ticker].monte_carlo;
+      if (!mc) return;
+      var opt = document.createElement("option");
+      opt.value = ticker;
+      opt.textContent = ticker + " — μ y σ históricos";
+      sourceSel.appendChild(opt);
+    });
+
+    function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+    function el(tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    }
+    function svgEl(tag, attrs, cls) {
+      var n = document.createElementNS(NS, tag);
+      Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, String(attrs[k])); });
+      if (cls) n.setAttribute("class", cls);
+      return n;
+    }
+    function usd(v) { return "US$ " + Math.round(v).toLocaleString("en-US"); }
+    function pctText(v) { return (v * 100).toFixed(0) + "%"; }
+
+    function applySource() {
+      var t = sourceSel.value;
+      metaEl.textContent = "";
+      if (t && companies[t] && companies[t].monte_carlo) {
+        var mc = companies[t].monte_carlo;
+        fields.s0.value = mc.s0.toFixed(2);
+        fields.mu.value = (mc.mu * 100).toFixed(1);
+        fields.sigma.value = (mc.sigma * 100).toFixed(1);
+        metaEl.textContent =
+          "μ y σ calculados de " + mc.n_obs + " retornos diarios hasta " + mc.as_of + " — " + mc.source +
+          ". Huella de la respuesta: " + String(mc.source_hash).slice(0, 12) + "… (histórico: no garantiza nada hacia adelante).";
+      } else {
+        fields.s0.value = "100";
+        fields.mu.value = "8";
+        fields.sigma.value = "25";
+        metaEl.textContent =
+          "Supuestos manuales de ejemplo: NO verificados y NO son de ninguna empresa. Cámbialos por los tuyos.";
+      }
+    }
+    sourceSel.addEventListener("change", applySource);
+    applySource();
+
+    function readParams() {
+      function num(name) { return Number(fields[name].value); }
+      var p = {
+        s0: num("s0"), mu: num("mu") / 100, sigma: num("sigma") / 100,
+        days: Math.round(num("days")), paths: Math.round(num("paths")),
+        capital: num("capital"), seed: Math.round(num("seed"))
+      };
+      var problems = [];
+      if (!(p.s0 > 0 && p.s0 <= 1e7)) problems.push("Precio inicial: entre 0 y 10,000,000.");
+      if (!(p.mu >= -1 && p.mu <= 2)) problems.push("μ: entre -100% y 200%.");
+      if (!(p.sigma > 0 && p.sigma <= 3)) problems.push("σ: mayor que 0 y hasta 300%.");
+      if (!(p.days >= 1 && p.days <= 756)) problems.push("Días: entre 1 y 756.");
+      if (!(p.paths >= 100 && p.paths <= 5000)) problems.push("Simulaciones: entre 100 y 5,000.");
+      if (!(p.capital > 0 && p.capital <= 1e9)) problems.push("Capital: entre 0 y 1,000,000,000.");
+      if (!isFinite(p.seed)) problems.push("Semilla: un número entero.");
+      return { p: p, problems: problems };
+    }
+
+    function statCard(label, value, note, cls) {
+      var c = el("div", "mc-stat " + (cls || ""));
+      c.appendChild(el("p", "mc-stat-label", label));
+      c.appendChild(el("p", "mc-stat-value", value));
+      if (note) c.appendChild(el("p", "mc-stat-note", note));
+      return c;
+    }
+
+    function fanChart(s, days) {
+      var W = 640, H = 280, L = 56, R = 12, T = 12, B = 28;
+      var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img" }, "mc-chart");
+      svg.setAttribute("aria-label", "Trayectorias simuladas del capital con bandas P5-P95");
+      var all = [];
+      s.bands.forEach(function (b) { all.push(b[0], b[4]); });
+      s.samplePaths.forEach(function (sp) { sp.forEach(function (v) { all.push(v); }); });
+      var yMin = Math.min.apply(null, all.concat([s.capital]));
+      var yMax = Math.max.apply(null, all.concat([s.capital]));
+      var span = yMax - yMin || 1;
+      function X(d) { return L + ((W - L - R) * d) / days; }
+      function Y(v) { return T + (H - T - B) * (1 - (v - yMin) / span); }
+      function path(vals) {
+        return vals.map(function (v, i) { return (i ? "L" : "M") + X(s.stepIdx[i]).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
+      }
+      var upper = s.bands.map(function (b) { return b[4]; });
+      var lower = s.bands.map(function (b) { return b[0]; });
+      var upper2 = s.bands.map(function (b) { return b[3]; });
+      var lower2 = s.bands.map(function (b) { return b[1]; });
+      function area(top, bottom) {
+        var fwd = top.map(function (v, i) { return (i ? "L" : "M") + X(s.stepIdx[i]).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
+        var back = bottom.map(function (v, i) { return "L" + X(s.stepIdx[bottom.length - 1 - i]).toFixed(1) + "," + Y(bottom[bottom.length - 1 - i]).toFixed(1); }).join(" ");
+        return fwd + " " + back + " Z";
+      }
+      svg.appendChild(svgEl("path", { d: area(upper, lower) }, "mc-band-outer"));
+      svg.appendChild(svgEl("path", { d: area(upper2, lower2) }, "mc-band-inner"));
+      s.samplePaths.forEach(function (sp) { svg.appendChild(svgEl("path", { d: path(sp) }, "mc-path")); });
+      svg.appendChild(svgEl("path", { d: path(s.bands.map(function (b) { return b[2]; })) }, "mc-median"));
+      svg.appendChild(svgEl("line", { x1: L, x2: W - R, y1: Y(s.capital), y2: Y(s.capital) }, "mc-capital-line"));
+      [[yMax, T + 4], [s.capital, Y(s.capital) - 4], [yMin, H - B - 2]].forEach(function (pair) {
+        var t = svgEl("text", { x: L - 6, y: pair[1], "text-anchor": "end" }, "mc-axis");
+        t.textContent = usd(pair[0]);
+        svg.appendChild(t);
+      });
+      [[0, "start", "día 0"], [days, "end", "día " + days]].forEach(function (a) {
+        var t = svgEl("text", { x: a[0] === 0 ? L : W - R, y: H - 8, "text-anchor": a[1] }, "mc-axis");
+        t.textContent = a[2];
+        svg.appendChild(t);
+      });
+      return svg;
+    }
+
+    function histChart(s) {
+      var W = 640, H = 200, L = 12, R = 12, T = 10, B = 28;
+      var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img" }, "mc-chart");
+      svg.setAttribute("aria-label", "Distribución simulada del valor final");
+      var bins = s.hist.bins;
+      var max = Math.max.apply(null, bins) || 1;
+      var bw = (W - L - R) / bins.length;
+      bins.forEach(function (count, i) {
+        var h = ((H - T - B) * count) / max;
+        var mid = s.hist.lo + s.hist.width * (i + 0.5);
+        svg.appendChild(svgEl("rect", {
+          x: (L + i * bw + 1).toFixed(1), y: (H - B - h).toFixed(1),
+          width: Math.max(bw - 2, 1).toFixed(1), height: h.toFixed(1)
+        }, mid < s.capital ? "mc-bar-loss" : "mc-bar-gain"));
+      });
+      var cx = L + ((s.capital - s.hist.lo) / (s.hist.width * bins.length)) * (W - L - R);
+      if (cx >= L && cx <= W - R) svg.appendChild(svgEl("line", { x1: cx, x2: cx, y1: T, y2: H - B }, "mc-capital-line"));
+      [[L, "start", usd(s.hist.lo)], [W - R, "end", usd(s.hist.lo + s.hist.width * bins.length)]].forEach(function (a) {
+        var t = svgEl("text", { x: a[0], y: H - 8, "text-anchor": a[1] }, "mc-axis");
+        t.textContent = a[2];
+        svg.appendChild(t);
+      });
+      return svg;
+    }
+
+    function render(s, p) {
+      clear(resultsEl);
+      lastSummary = { s: s, p: p };
+      var riskRow = el("div", "mc-stats");
+      riskRow.appendChild(statCard("Prob. de perder más de 10%", pctText(s.pLoss10), "Riesgo primero", "mc-risk"));
+      riskRow.appendChild(statCard("Pérdida en el peor 5% (VaR 95%)", usd(s.var95), "Simulada, no garantizada", "mc-risk"));
+      riskRow.appendChild(statCard("Prob. de terminar arriba", pctText(s.pUp), "Valor final > capital inicial"));
+      riskRow.appendChild(statCard("Prob. de ganar más de 20%", pctText(s.pGain20), "Escenario optimista"));
+      resultsEl.appendChild(riskRow);
+      var pr = el("div", "mc-stats mc-stats-3");
+      pr.appendChild(statCard("P5 (escenario malo)", usd(s.p5), "5% termina por debajo"));
+      pr.appendChild(statCard("P50 (mediana)", usd(s.p50), "La mitad termina por debajo"));
+      pr.appendChild(statCard("P95 (escenario bueno)", usd(s.p95), "5% termina por encima"));
+      resultsEl.appendChild(pr);
+      var f1 = el("figure", "mc-figure");
+      f1.appendChild(el("figcaption", "", "Trayectorias simuladas (" + p.paths + " en total; se dibujan 25) y bandas P5–P95 / P25–P75"));
+      f1.appendChild(fanChart(s, p.days));
+      resultsEl.appendChild(f1);
+      var f2 = el("figure", "mc-figure");
+      f2.appendChild(el("figcaption", "", "Distribución del valor final (rojo: por debajo del capital inicial)"));
+      f2.appendChild(histChart(s));
+      resultsEl.appendChild(f2);
+      document.dispatchEvent(new CustomEvent("mc-updated"));
+    }
+
+    runBtn.addEventListener("click", function () {
+      var r = readParams();
+      if (r.problems.length) {
+        errorEl.textContent = r.problems.join(" ");
+        return;
+      }
+      errorEl.textContent = "";
+      runBtn.disabled = true;
+      window.setTimeout(function () {
+        render(summarize(simulateGBM(r.p)), r.p);
+        runBtn.disabled = false;
+      }, 0);
+    });
+
+    window.__qlLastSim = function () { return lastSummary; };
+  })();
+
+  (function () {
+    var factSel = document.getElementById("diary-fact");
+    var scenSel = document.getElementById("diary-scenario");
+    var noteEl = document.getElementById("diary-note");
+    var previewEl = document.getElementById("diary-preview");
+    var copyBtn = document.getElementById("diary-copy");
+    var dlBtn = document.getElementById("diary-download");
+    var statusEl = document.getElementById("diary-status");
+    if (!factSel || !scenSel || !noteEl || !previewEl) return;
+
+    function usd(v) { return "US$ " + Math.round(v).toLocaleString("en-US"); }
+
+    document.querySelectorAll("[data-figure-label]").forEach(function (card) {
+      var opt = document.createElement("option");
+      opt.value = card.getAttribute("data-figure-label");
+      opt.textContent = card.getAttribute("data-figure-label");
+      factSel.appendChild(opt);
+    });
+
+    function refreshScenarios() {
+      var keep = scenSel.value;
+      while (scenSel.options.length > 1) scenSel.remove(1);
+      var last = window.__qlLastSim && window.__qlLastSim();
+      if (last) {
+        [["P5 (escenario malo)", last.s.p5], ["P50 (mediana)", last.s.p50], ["P95 (escenario bueno)", last.s.p95]].forEach(function (pair) {
+          var opt = document.createElement("option");
+          opt.value = pair[0] + " = " + usd(pair[1]) + " en " + last.p.days + " días (SIMULADO)";
+          opt.textContent = pair[0] + " — " + usd(pair[1]);
+          scenSel.appendChild(opt);
+        });
+      }
+      scenSel.value = keep && Array.prototype.some.call(scenSel.options, function (o) { return o.value === keep; }) ? keep : "";
+    }
+    document.addEventListener("mc-updated", function () { refreshScenarios(); build(); });
+
+    function posture() {
+      var r = document.querySelector('input[name="diary-posture"]:checked');
+      return r ? r.value : "Sin definir";
+    }
+
+    function build() {
+      var today = new Date().toISOString().slice(0, 10);
+      var last = window.__qlLastSim && window.__qlLastSim();
+      var lines = [
+        "# Diario de decisiones — " + today,
+        "",
+        "## Hecho verificado (Capa A)",
+        factSel.value || "(ninguno elegido)",
+        "",
+        "## Escenario simulado (Capa B)",
+        scenSel.value || "(ninguno elegido)"
+      ];
+      if (last) {
+        lines.push("Supuestos: precio inicial " + last.p.s0 + ", μ " + (last.p.mu * 100).toFixed(1) + "%, σ " +
+          (last.p.sigma * 100).toFixed(1) + "%, " + last.p.days + " días, " + last.p.paths + " simulaciones, semilla " + last.p.seed + ".");
+      }
+      lines.push("", "## Mi postura", posture(), "", "## Mi razonamiento", noteEl.value || "(vacío)", "",
+        "---", "Análisis informativo, no asesoría financiera. La decisión es tuya.", "");
+      previewEl.value = lines.join("\\n");
+    }
+    [factSel, scenSel, noteEl].forEach(function (n) { n.addEventListener("input", build); n.addEventListener("change", build); });
+    document.querySelectorAll('input[name="diary-posture"]').forEach(function (r) { r.addEventListener("change", build); });
+    build();
+
+    function say(msg) { statusEl.textContent = msg; }
+
+    copyBtn.addEventListener("click", function () {
+      build();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(previewEl.value).then(
+          function () { say("Copiado. Pégalo donde guardes tu diario (por ejemplo, Notion)."); },
+          function () { previewEl.select(); say("No se pudo copiar solo: el texto quedó seleccionado, copia con Ctrl/Cmd+C."); }
+        );
+      } else {
+        previewEl.select();
+        say("Este navegador no permite copiar solo: copia el texto seleccionado con Ctrl/Cmd+C.");
+      }
+    });
+
+    dlBtn.addEventListener("click", function () {
+      build();
+      var blob = new Blob([previewEl.value], { type: "text/markdown;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "diario-" + new Date().toISOString().slice(0, 10) + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      say("Descargado. Esta página no guarda nada: tu texto solo vive en el archivo que descargas.");
+    });
+  })();
+
   var items = document.querySelectorAll(".reveal");
   if (prefersReduced || !("IntersectionObserver" in window)) {
     items.forEach(function (el) { el.classList.add("is-visible"); });
@@ -383,238 +784,174 @@ _CSP = (
 
 _STYLE = """
   :root {
-    --bg: #090c17;
-    --bg-glow-1: rgba(99, 102, 241, .22);
-    --bg-glow-2: rgba(168, 85, 247, .16);
-    --surface: rgba(255,255,255,.05);
-    --surface-2: rgba(255,255,255,.10);
-    --surface-solid: #141a2e;
-    --accent: #6366f1;
-    --accent-2: #a855f7;
-    --accent-dark: #a5b4fc;
-    --text: #eef2ff;
-    --muted: #8b96b8;
-    --warn-bg: rgba(245,158,11,.12);
-    --warn-border: #f59e0b;
-    --radius: 18px;
+    --bg: #0A0D11;
+    --s1: #10151B;
+    --s2: #161C24;
+    --line: #232B35;
+    --mint: #6BE3BE;
+    --vio: #BBA8FF;
+    --amb: #F6BC52;
+    --cor: #FF8F80;
+    --paper: #E9EEF3;
+    --ink: #12161C;
+    --text: #E6EBF1;
+    --muted: #8D98A6;
+    --radius: 14px;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    margin: 0;
-    background:
-      radial-gradient(900px 500px at 15% -10%, var(--bg-glow-1), transparent 60%),
-      radial-gradient(700px 500px at 100% 10%, var(--bg-glow-2), transparent 55%),
-      var(--bg);
-    background-attachment: fixed;
-    color: var(--text);
+    margin: 0; background: var(--bg); color: var(--text); line-height: 1.55;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    line-height: 1.55;
   }
-  a { color: var(--accent-dark); }
+  a { color: var(--mint); }
+  h1, h2, h3, h4 { line-height: 1.2; margin: 0; }
   #scroll-progress {
-    position: fixed; top: 0; left: 0; height: 3px; width: 0%;
-    background: linear-gradient(90deg, var(--accent), var(--accent-2));
-    z-index: 50; transition: width .1s linear;
+    position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 50;
+    background: linear-gradient(90deg, var(--mint), var(--vio)); transition: width .1s linear;
   }
-  .hero {
-    position: relative; overflow: hidden;
-    background: linear-gradient(135deg, #1e1b4b 0%, var(--accent) 55%, var(--accent-2) 100%);
-    color: #ffffff; padding: 3.5rem 1.5rem 4rem;
-    box-shadow: 0 30px 80px -40px rgba(99,102,241,.6);
-  }
-  .hero-blob {
-    position: absolute; inset: -45% -15% auto auto; width: 65vw; height: 65vw; max-width: 680px; max-height: 680px;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.45), transparent 60%);
-    border-radius: 50%; pointer-events: none; filter: blur(2px);
-  }
-  .hero-blob-2 {
-    position: absolute; inset: auto auto -50% -10%; width: 50vw; height: 50vw; max-width: 520px; max-height: 520px;
-    background: radial-gradient(circle at 50% 50%, rgba(168,85,247,.55), transparent 65%);
-    border-radius: 50%; pointer-events: none; filter: blur(6px);
-  }
-  .hero-inner { position: relative; max-width: 960px; margin: 0 auto; }
-  .pill-row { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.25rem; }
-  .pill {
-    background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.35);
-    padding: .3rem .75rem; border-radius: 999px; font-size: .78rem; backdrop-filter: blur(4px);
-  }
-  .hero h1 { margin: 0 0 .35rem; font-size: 2rem; }
-  .hero-sub { margin: 0 0 1.25rem; opacity: .92; font-size: .95rem; }
-  .hero-cta {
-    display: inline-block; color: #ffffff; text-decoration: none; font-weight: 600;
-    border-bottom: 2px solid rgba(255,255,255,.6); padding-bottom: 2px;
-  }
-  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem 1rem; }
-  section { margin-bottom: 2.5rem; }
-  h2 { color: var(--accent-dark); font-size: 1.25rem; }
-  .section-intro { color: var(--muted); margin-top: -.5rem; }
-  .risk {
-    background: var(--warn-bg); border-left: 4px solid var(--warn-border);
-    border-radius: var(--radius); padding: 1.25rem 1.5rem;
-  }
-  .risk ul { margin: .5rem 0; padding-left: 1.25rem; }
-  .risk-note { color: var(--muted); font-size: .9rem; }
-
-  .pipeline-track { display: flex; flex-wrap: wrap; align-items: stretch; gap: .5rem; }
-  .step {
-    flex: 1 1 160px; background: var(--surface); border: 1px solid var(--surface-2);
-    border-radius: var(--radius); padding: 1.1rem; text-align: center;
-  }
-  .step-icon { font-size: 1.6rem; margin-bottom: .4rem; }
-  .step h3 { margin: 0 0 .35rem; font-size: .95rem; color: var(--accent-dark); }
-  .step p { margin: 0; font-size: .82rem; color: var(--muted); }
-  .step-arrow { align-self: center; color: var(--accent); font-size: 1.3rem; flex: 0 0 auto; }
-  @media (max-width: 720px) { .step-arrow { transform: rotate(90deg); } }
-
-  .footer-link { text-align: center; font-size: .85rem; margin-top: .5rem; }
-
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-  .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-  .card {
-    background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius);
-    padding: 1rem 1.1rem; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-    backdrop-filter: blur(10px);
-  }
-  .card:hover {
-    transform: translateY(-3px); border-color: rgba(165,180,252,.35);
-    box-shadow: 0 16px 36px -16px rgba(99,102,241,.45);
-  }
-  .card-head { display: flex; align-items: center; gap: .5rem; }
-  .card-head h3 { margin: 0; font-size: .92rem; color: var(--text); flex: 1; }
-  .card-icon { font-size: 1.1rem; }
-  .card-value { font-size: 1.5rem; font-weight: 700; margin: .5rem 0; color: var(--accent-dark); }
-  .card-note { color: var(--muted); font-size: .85rem; margin: 0; }
-  .card-detail summary { cursor: pointer; color: var(--accent-dark); font-size: .85rem; }
-  .card-detail summary:focus-visible, a:focus-visible, button:focus-visible {
-    outline: 3px solid var(--accent); outline-offset: 2px;
-  }
-  .card-detail div { font-size: .85rem; color: var(--muted); margin-top: .4rem; }
-  .card-detail blockquote {
-    margin: .4rem 0 0; padding: .5rem .75rem; background: var(--surface-solid);
-    border-left: 3px solid var(--accent); border-radius: 6px; font-style: italic;
-  }
-  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
-  .stat-card {
-    background: var(--surface-solid); border: 1px solid var(--surface-2); border-radius: var(--radius);
-    padding: 1.1rem; display: flex; align-items: center; gap: .85rem;
-    box-shadow: 0 8px 24px -16px rgba(0,0,0,.5);
-  }
-  .stat-icon {
-    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
-    background: linear-gradient(135deg, rgba(99,102,241,.35), rgba(168,85,247,.25));
-    display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
-  }
-  .stat-label { color: var(--muted); font-size: .78rem; margin: 0 0 .15rem; }
-  .stat-value { font-size: 1.35rem; font-weight: 700; margin: 0; color: var(--text); }
-  .chart-card { padding: 1.25rem 1.25rem 0.5rem; }
-  .line-chart { width: 100%; height: auto; display: block; }
-  .chart-line { stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
-  .chart-dot { fill: var(--accent-dark); }
-  .chart-fade-start { stop-color: var(--accent); stop-opacity: .35; }
-  .chart-fade-end { stop-color: var(--accent); stop-opacity: 0; }
-  .chart-value-label { font-size: 11px; fill: var(--accent-dark); font-weight: 600; }
-  .chart-year-label { font-size: 11px; fill: var(--muted); }
-  .badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }
-  .badge-ok { background: rgba(34,197,94,.18); color: #4ade80; }
-  .badge-info { background: rgba(99,102,241,.2); color: #a5b4fc; }
-  .badge-warn { background: rgba(245,158,11,.2); color: #fbbf24; }
-  .cambios-body { white-space: pre-line; }
-
-  .try-it { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.5rem; }
-  .try-it-warning {
-    background: var(--warn-bg); border-left: 4px solid var(--warn-border); border-radius: 10px;
-    padding: .9rem 1.1rem; font-size: .85rem; margin-bottom: 1.25rem;
-  }
-  .try-it-head { display: flex; align-items: center; gap: .9rem; margin-bottom: 1rem; }
-  .try-it-head h2 { margin: 0; }
-  .bot-avatar {
-    flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
-    background: linear-gradient(135deg, var(--accent), var(--accent-2));
-    display: flex; align-items: center; justify-content: center; font-size: 1.4rem;
-    animation: bot-pulse 2.4s ease-in-out infinite;
-    box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 0 28px rgba(99,102,241,.8);
-  }
-  @keyframes bot-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-  .try-it-label { display: block; font-size: .85rem; font-weight: 600; margin-bottom: .35rem; }
-  .try-it-select {
-    width: 100%; max-width: 320px; padding: .55rem .7rem; border-radius: 10px;
-    border: 1px solid var(--surface-2); background: var(--surface-solid); color: var(--text); font-size: .95rem;
-  }
-  .try-it-select option { background: var(--surface-solid); color: var(--text); }
-  .try-it-select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-  .try-it-result { margin-top: 1.25rem; min-height: 1px; }
-  .try-it-result-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-  .try-it-result-head h3 { margin: 0; font-size: 1rem; }
-  .try-it-price { font-size: .95rem; margin: .5rem 0; }
-  .try-it-figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .5rem; margin-top: .75rem; }
-  .try-it-figure {
-    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-    background: var(--surface-solid); border: 1px solid var(--surface-2); border-radius: 10px; padding: .5rem .7rem; font-size: .82rem;
-  }
-  .try-it-figure-label { color: var(--muted); }
-  .try-it-figure-value { font-weight: 700; }
-  .thinking { color: var(--muted); }
-  .thinking::after { content: ""; animation: thinking-dots 1.2s steps(4, end) infinite; }
-  @keyframes thinking-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
-
-  .try-it-live { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
-  .live-card { padding: .85rem; }
-  .live-card h4 { margin: 0 0 .5rem; font-size: .85rem; color: var(--accent-dark); }
-  .live-frame { width: 100%; border: none; border-radius: 10px; display: block; background: var(--surface-solid); }
-  .live-frame-chart { height: 220px; }
-  .live-frame-news { height: 280px; }
-  .live-note { grid-column: 1 / -1; font-size: .75rem; color: var(--muted); margin: 0; }
-
-  .chat-card {
-    margin-top: 1.25rem; position: relative; overflow: hidden;
-    background: linear-gradient(160deg, rgba(99,102,241,.16), rgba(168,85,247,.08) 60%, transparent);
-    border: 1px solid rgba(165,180,252,.25);
-    border-radius: var(--radius); padding: 1.25rem;
-  }
-  .chat-head { display: flex; align-items: center; gap: .65rem; margin-bottom: .5rem; }
-  .bot-avatar-sm {
-    width: 34px; height: 34px; font-size: 1.05rem; animation: none;
-    box-shadow: 0 0 0 1px rgba(255,255,255,.15), 0 0 24px rgba(99,102,241,.75);
-  }
-  .chat-head strong { font-size: 1.02rem; }
-  .chat-warn { font-size: .78rem; color: var(--muted); margin: 0 0 .9rem; }
-  .chat-log { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .75rem; max-height: 320px; overflow-y: auto; }
-  .chat-bubble { padding: .6rem .85rem; border-radius: 14px; font-size: .88rem; max-width: 90%; }
-  .chat-bubble-user { align-self: flex-end; background: var(--accent); color: #ffffff; border-bottom-right-radius: 3px; }
-  .chat-bubble-bot {
-    align-self: flex-start; background: var(--surface-solid); border: 1px solid var(--surface-2);
-    border-bottom-left-radius: 3px;
-  }
-  .chat-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
-  .chat-question-btn {
-    background: var(--surface-solid); border: 1px solid var(--surface-2); border-radius: 999px; padding: .45rem .9rem;
-    font-size: .8rem; color: var(--accent-dark); cursor: pointer; transition: border-color .15s ease, background .15s ease;
-  }
-  .chat-question-btn:hover:not(:disabled) { background: rgba(99,102,241,.18); border-color: rgba(165,180,252,.4); }
-  .chat-question-btn:disabled { opacity: .4; cursor: default; }
-  .chat-question-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .bot-avatar { animation: none; }
-    .thinking::after { animation: none; content: "..."; }
-  }
-
-  footer {
-    text-align: center; color: var(--muted); font-size: .85rem;
-    padding: 1.5rem; border-top: 1px solid var(--surface-2);
-  }
-  footer strong { color: var(--text); }
-  /* El contenido es visible por defecto: si el script no corre, por lo que
-     sea (bloqueado, un error, JS desactivado), nunca desaparece. Solo se
-     "pre-esconde" para animar cuando el propio script confirma que arrancó
-     (clase .js-ready en <html>, puesta como primera línea del script). */
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+  .site-header { border-bottom: 1px solid var(--line); background: rgba(10,13,17,.92); position: sticky; top: 0; z-index: 40; }
+  .site-header .wrap { display: flex; align-items: center; gap: 18px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
+  .brand { font-weight: 700; letter-spacing: .02em; }
+  .brand span { color: var(--mint); }
+  .nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
+  .nav a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 999px; font-size: .9rem; }
+  .nav a:hover, .nav a:focus-visible { color: var(--text); background: var(--s2); }
+  .pill { font-size: .78rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--s1); }
+  .strip { background: var(--s1); border-bottom: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+  .strip .wrap { padding-top: 8px; padding-bottom: 8px; }
+  .hero { padding: 44px 20px 20px; }
+  .hero h1 { font-size: clamp(1.9rem, 4.5vw, 2.9rem); letter-spacing: -.02em; max-width: 18ch; }
+  .hero p { color: var(--muted); max-width: 62ch; margin: 12px 0 0; }
+  .hero .chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .layer { margin: 28px 0; }
+  .layer-tag { display: inline-block; font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; padding: 4px 10px; border-radius: 6px; margin-bottom: 12px; }
+  .layer-a .layer-tag { color: var(--mint); background: rgba(107,227,190,.12); border: 1px solid rgba(107,227,190,.35); }
+  .layer-b .layer-tag { color: var(--vio); background: rgba(187,168,255,.12); border: 1px dashed rgba(187,168,255,.5); }
+  .layer h2 { font-size: 1.4rem; margin: 22px 0 8px; }
+  .section-intro { color: var(--muted); margin: 0 0 14px; max-width: 70ch; }
+  .risk { border: 1px solid rgba(246,188,82,.5); background: rgba(246,188,82,.08); border-radius: var(--radius); padding: 18px 20px; }
+  .risk h2 { margin-top: 0; color: var(--amb); font-size: 1.15rem; }
+  .risk ul { margin: 6px 0 10px; padding-left: 20px; }
+  .risk-note { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+  .stat-row, .calc-grid, .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .stat-row { margin-bottom: 14px; }
+  .stat-card, .card { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-card { display: flex; gap: 12px; align-items: center; }
+  .stat-icon, .card-icon { font-size: 1.3rem; }
+  .stat-label { margin: 0; color: var(--muted); font-size: .85rem; }
+  .stat-value, .card-value { margin: 2px 0 0; font-family: var(--mono); font-size: 1.35rem; font-weight: 600; }
+  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .card-head h3 { font-size: 1rem; flex: 1; }
+  .card-note { color: var(--muted); font-size: .88rem; margin: 8px 0 0; }
+  .card-detail { margin-top: 10px; font-size: .88rem; color: var(--muted); }
+  .card-detail summary { cursor: pointer; color: var(--mint); }
+  blockquote { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--mint); background: var(--s2); color: var(--text); font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
+  .badge { font-size: .72rem; padding: 3px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .badge-ok { color: var(--mint); border-color: rgba(107,227,190,.5); background: rgba(107,227,190,.1); }
+  .badge-info { color: var(--vio); border-color: rgba(187,168,255,.5); background: rgba(187,168,255,.1); }
+  .badge-warn { color: var(--amb); border-color: rgba(246,188,82,.5); background: rgba(246,188,82,.1); }
+  .chart-card { margin-bottom: 14px; }
+  .chart-card h3 { font-size: 1rem; margin-bottom: 8px; }
+  .line-chart { width: 100%; height: auto; }
+  .chart-line { stroke: var(--mint); stroke-width: 2.5; }
+  .chart-dot { fill: var(--mint); }
+  .chart-fade-start { stop-color: var(--mint); stop-opacity: .3; }
+  .chart-fade-end { stop-color: var(--mint); stop-opacity: 0; }
+  .chart-value-label, .chart-year-label { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .frontier { margin: 40px 0 10px; padding: 18px 0; border-top: 2px dashed var(--line); border-bottom: 2px dashed var(--line); text-align: center; color: var(--muted); font-family: var(--mono); font-size: .85rem; letter-spacing: .04em; }
+  .frontier strong { color: var(--text); }
+  .notice-b { border: 1px dashed rgba(187,168,255,.55); background: rgba(187,168,255,.07); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
+  .notice-b p { margin: 0; }
+  .mc-controls { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .field label, .try-it-label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+  .field.wide { grid-column: 1 / -1; }
+  input, select, textarea, button { font: inherit; }
+  input[type="number"], select, textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+  .btn { background: var(--mint); color: #062016; border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid #9AA6B4; }
+  .mc-meta { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
+  .mc-error { color: var(--cor); min-height: 1.2em; margin: 8px 0 0; font-size: .9rem; }
+  .mc-stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px; }
+  .mc-stats-3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .mc-stat { background: var(--s1); border: 1px dashed rgba(187,168,255,.45); border-radius: var(--radius); padding: 14px 16px; }
+  .mc-stat.mc-risk { border-color: rgba(255,143,128,.6); background: rgba(255,143,128,.06); }
+  .mc-stat-label { margin: 0; color: var(--muted); font-size: .82rem; }
+  .mc-stat-value { margin: 4px 0 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 700; }
+  .mc-risk .mc-stat-value { color: var(--cor); }
+  .mc-stat-note { margin: 2px 0 0; color: var(--muted); font-size: .78rem; }
+  .mc-figure { margin: 16px 0 0; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .mc-figure figcaption { color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
+  .mc-chart { width: 100%; height: auto; }
+  .mc-band-outer { fill: rgba(187,168,255,.14); }
+  .mc-band-inner { fill: rgba(187,168,255,.22); }
+  .mc-path { fill: none; stroke: rgba(187,168,255,.35); stroke-width: 1; }
+  .mc-median { fill: none; stroke: var(--vio); stroke-width: 2.5; }
+  .mc-capital-line { stroke: var(--amb); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .mc-axis { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .mc-bar-gain { fill: rgba(187,168,255,.7); }
+  .mc-bar-loss { fill: rgba(255,143,128,.75); }
+  .limits { color: var(--muted); font-size: .88rem; margin-top: 16px; }
+  .limits ul { padding-left: 20px; margin: 6px 0 0; }
+  .diary { background: var(--paper); color: var(--ink); border-radius: var(--radius); padding: 22px; margin-top: 8px; }
+  .diary h2 { margin-top: 0; }
+  .diary .section-intro, .diary label, .diary .hint { color: #4A5563; }
+  .diary .grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .diary select, .diary textarea { background: #fff; color: var(--ink); border-color: #B7C1CC; }
+  .diary fieldset { border: 1px solid #B7C1CC; border-radius: 8px; padding: 8px 12px; margin: 14px 0; }
+  .diary legend { font-size: .8rem; color: #4A5563; padding: 0 6px; }
+  .diary fieldset label { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; font-size: .95rem; color: var(--ink); }
+  .diary textarea { min-height: 110px; resize: vertical; }
+  .diary .preview { font-family: var(--mono); font-size: .8rem; min-height: 170px; }
+  .diary .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .diary .hint { font-size: .82rem; margin: 6px 0 0; }
+  .pipeline-track { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+  .step { flex: 1 1 170px; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .step h3 { font-size: .98rem; margin: 6px 0; }
+  .step p { margin: 0; color: var(--muted); font-size: .86rem; }
+  .step-icon { font-size: 1.4rem; }
+  .step-arrow { align-self: center; color: var(--muted); }
+  .try-it { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 18px; }
+  .try-it-warning { background: rgba(246,188,82,.08); border: 1px solid rgba(246,188,82,.4); border-radius: 10px; padding: 10px 14px; font-size: .88rem; margin: 0 0 14px; }
+  .try-it-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .try-it h2 { margin: 0; font-size: 1.2rem; }
+  .bot-avatar { font-size: 1.6rem; }
+  .bot-avatar-sm { font-size: 1.1rem; margin-right: 6px; }
+  .try-it-select { max-width: 340px; }
+  .try-it-result { margin-top: 14px; }
+  .try-it-result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .try-it-price { font-family: var(--mono); font-size: .9rem; }
+  .try-it-figures { display: grid; gap: 6px; margin-top: 10px; }
+  .try-it-figure { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .try-it-figure-label { flex: 1; color: var(--muted); }
+  .try-it-figure-value { font-family: var(--mono); }
+  .try-it-live { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 14px; }
+  .live-card h4 { margin-bottom: 8px; }
+  .live-frame { width: 100%; border: 0; border-radius: 8px; background: var(--bg); }
+  .live-frame-chart { height: 280px; }
+  .live-frame-news { height: 320px; }
+  .live-note { grid-column: 1 / -1; color: var(--muted); font-size: .82rem; margin: 0; }
+  .chat-card { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); }
+  .chat-head { display: flex; align-items: center; }
+  .chat-warn { color: var(--muted); font-size: .82rem; margin: 6px 0 10px; }
+  .chat-log { display: grid; gap: 8px; margin-bottom: 10px; }
+  .chat-bubble { padding: 10px 12px; border-radius: 12px; max-width: 90%; font-size: .92rem; }
+  .chat-bubble-user { background: var(--s2); justify-self: end; }
+  .chat-bubble-bot { background: rgba(107,227,190,.1); border: 1px solid rgba(107,227,190,.3); }
+  .chat-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chat-question-btn { background: var(--s2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .chat-question-btn:disabled { opacity: .5; cursor: default; }
+  footer { margin-top: 48px; border-top: 1px solid var(--line); padding: 24px 0 40px; color: var(--muted); font-size: .88rem; }
+  footer p { margin: 4px 0; }
   .js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
-  .reveal.is-visible { opacity: 1; transform: none; }
+  .js-ready .reveal.is-visible { opacity: 1; transform: none; }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .js-ready .reveal { opacity: 1; transform: none; transition: none; }
-    .card { transition: none; }
     #scroll-progress { transition: none; }
   }
 """
@@ -804,7 +1141,7 @@ def _figure_card(index: int, key: str, label: str, cv: CitedValue) -> str:
         )
     delay = min(index, 6) * 60
     return f"""
-      <article class="card reveal" style="transition-delay:{delay}ms" data-key="{_esc(key)}">
+      <article class="card reveal" style="transition-delay:{delay}ms" data-key="{_esc(key)}" data-figure-label="{_esc(label)}">
         <header class="card-head">
           <span class="card-icon" aria-hidden="true">{icon}</span>
           <h3>{_esc(label)}</h3>
@@ -818,22 +1155,113 @@ def _figure_card(index: int, key: str, label: str, cv: CitedValue) -> str:
       </article>"""
 
 
+def _site_header() -> str:
+    return """
+  <header class="site-header">
+    <div class="wrap">
+      <span class="brand">Quant <span>Lab</span></span>
+      <nav class="nav" aria-label="Secciones">
+        <a href="#reporte">1 · Reporte</a>
+        <a href="#simulacion">2 · Simulación</a>
+        <a href="#diario">3 · Diario</a>
+        <a href="#como-funciona">Cómo se verifica</a>
+      </nav>
+      <span class="pill">Solo investigación</span>
+    </div>
+  </header>
+  <div class="strip"><div class="wrap">Análisis informativo, no es asesoría financiera. Nunca dice "compra" ni "vende": la decisión es tuya.</div></div>"""
+
+
 def _hero(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime) -> str:
     return f"""
-  <header class="hero">
-    <div class="hero-blob" aria-hidden="true"></div>
-    <div class="hero-blob-2" aria-hidden="true"></div>
-    <div class="hero-inner">
-      <div class="pill-row">
-        <span class="pill">✅ Cada cifra citada o marcada "no verificado"</span>
-        <span class="pill">🔒 Sin backend · sin tus datos</span>
-        <span class="pill">🚫 Nunca "compra" ni "vende"</span>
-      </div>
-      <h1>{_esc(empresa_ejemplo)}</h1>
-      <p class="hero-sub">Reporte de {_esc(filing_doc_id)} · generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</p>
-      <a class="hero-cta" href="#como-funciona">¿Cómo sé que esto es confiable? ↓</a>
+  <section class="hero wrap">
+    <h1>Qué dice el reporte, y qué podría pasar.</h1>
+    <p>Dos capas separadas a propósito: arriba, hechos con cita del documento oficial; abajo, escenarios
+    simulados que no son predicciones. Nunca se mezclan.</p>
+    <div class="chips">
+      <span class="pill">{_esc(empresa_ejemplo)}</span>
+      <span class="pill">{_esc(filing_doc_id)}</span>
+      <span class="pill">generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</span>
     </div>
-  </header>"""
+  </section>"""
+
+
+def _frontier() -> str:
+    return """
+    <div class="frontier" role="separator">
+      ▲ <strong>HECHOS CON CITA</strong> &nbsp;·&nbsp; frontera: nada simulado cruza hacia arriba &nbsp;·&nbsp; <strong>ESCENARIOS SIMULADOS</strong> ▼
+    </div>"""
+
+
+def _mc_section() -> str:
+    return """
+    <section class="layer layer-b" id="simulacion" aria-labelledby="mc-title">
+      <span class="layer-tag">CAPA B · SIMULADO · SIN VALIDAR</span>
+      <h2 id="mc-title">Simulación Monte Carlo</h2>
+      <div class="notice-b">
+        <p><strong>Esto es una simulación, no un hecho ni una predicción.</strong> Aquí no hay citas del documento:
+        los resultados salen de los supuestos que ves abajo. Las probabilidades no están validadas con un
+        backtest, así que no las uses para decidir por sí solas.</p>
+      </div>
+      <div class="mc-controls">
+        <div class="field wide">
+          <label for="mc-source">Origen de μ y σ</label>
+          <select id="mc-source"><option value="">Supuestos manuales (no verificados)</option></select>
+        </div>
+        <div class="field"><label for="mc-s0">Precio inicial (US$)</label><input id="mc-s0" type="number" step="any" min="0" value="100"></div>
+        <div class="field"><label for="mc-mu">μ, retorno anual (%)</label><input id="mc-mu" type="number" step="any" value="8"></div>
+        <div class="field"><label for="mc-sigma">σ, volatilidad anual (%)</label><input id="mc-sigma" type="number" step="any" min="0" value="25"></div>
+        <div class="field"><label for="mc-days">Días de mercado</label><input id="mc-days" type="number" step="1" min="1" max="756" value="90"></div>
+        <div class="field"><label for="mc-paths">Simulaciones</label><input id="mc-paths" type="number" step="100" min="100" max="5000" value="2000"></div>
+        <div class="field"><label for="mc-capital">Capital simulado (US$)</label><input id="mc-capital" type="number" step="any" min="0" value="1000"></div>
+        <div class="field"><label for="mc-seed">Semilla (reproducible)</label><input id="mc-seed" type="number" step="1" value="42"></div>
+        <div class="field"><label>&nbsp;</label><button type="button" id="mc-run" class="btn">Simular</button></div>
+      </div>
+      <p id="mc-meta" class="mc-meta"></p>
+      <p id="mc-error" class="mc-error" role="alert"></p>
+      <div id="mc-results" aria-live="polite"></div>
+      <div class="limits">
+        <strong>Límites de este modelo</strong>
+        <ul>
+          <li>Supone que el futuro se parece al pasado reciente; los mercados cambian de régimen.</li>
+          <li>Retornos con forma de campana: subestima caídas extremas (colas gordas, saltos, gaps).</li>
+          <li>No incluye comisiones, impuestos, dividendos ni noticias del reporte.</li>
+          <li>Mismo conjunto de supuestos + misma semilla = mismo resultado; otra semilla cambia los números.</li>
+        </ul>
+      </div>
+    </section>"""
+
+
+def _diary_section() -> str:
+    return """
+    <section class="layer" id="diario" aria-labelledby="diary-title">
+      <div class="diary">
+        <h2 id="diary-title">Diario de decisiones</h2>
+        <p class="section-intro">Anota qué hecho verificado y qué escenario simulado miraste, y por qué.
+        Quedan en campos separados. Esta página no guarda nada: copia el texto o descárgalo.</p>
+        <div class="grid2">
+          <div><label for="diary-fact">Hecho verificado (Capa A)</label>
+            <select id="diary-fact"><option value="">— ninguno —</option></select></div>
+          <div><label for="diary-scenario">Escenario simulado (Capa B)</label>
+            <select id="diary-scenario"><option value="">— ninguno (corre una simulación primero) —</option></select></div>
+        </div>
+        <fieldset>
+          <legend>Mi postura (tuya, no del sistema)</legend>
+          <label><input type="radio" name="diary-posture" value="Seguir investigando" checked> Seguir investigando</label>
+          <label><input type="radio" name="diary-posture" value="Esperar más información"> Esperar más información</label>
+          <label><input type="radio" name="diary-posture" value="Descartar por ahora"> Descartar por ahora</label>
+        </fieldset>
+        <label for="diary-note">Mi razonamiento (incluye qué argumento en contra consideraste)</label>
+        <textarea id="diary-note" maxlength="1000" placeholder="¿Qué me convenció? ¿Qué me haría cambiar de opinión?"></textarea>
+        <label for="diary-preview" style="display:block;margin-top:14px">Vista previa (Markdown)</label>
+        <textarea id="diary-preview" class="preview" readonly></textarea>
+        <div class="actions">
+          <button type="button" id="diary-copy" class="btn">Copiar</button>
+          <button type="button" id="diary-download" class="btn btn-ghost">Descargar .md</button>
+        </div>
+        <p id="diary-status" class="hint" role="status"></p>
+      </div>
+    </section>"""
 
 
 def _pipeline_section() -> str:
@@ -980,31 +1408,38 @@ def build_html_report(
 </head>
 <body>
   <div id="scroll-progress"></div>
+  {_site_header()}
   {_hero(empresa_ejemplo, filing_doc_id, generated_at)}
-  <main>
-    {_risk_banner(verified, fcf)}
-    {_pipeline_section()}
-    <section aria-label="Cifras con fuente">
+  <main class="wrap">
+    <section class="layer layer-a" id="reporte">
+      <span class="layer-tag">CAPA A · HECHOS VERIFICADOS</span>
+      {_risk_banner(verified, fcf)}
       <h2>📊 Cifras con fuente</h2>
       <p class="section-intro">Cada tarjeta dice si la cifra está citada, es derivada de otras, o no se pudo verificar.</p>
       {stat_cards}
       {chart_card}
       <div class="grid">{cards}
       </div>
-    </section>
-    <section aria-label="Cálculos">
       <h2>🧮 Cálculos</h2>
       {_calc_cards(fcf, cagr)}
+      {cambios_section}
+      {_try_it_section(companies)}
     </section>
-    {cambios_section}
-    {_try_it_section(companies)}
+    {_frontier()}
+    {_mc_section()}
+    {_diary_section()}
+    <section class="layer" aria-label="Cómo se verifica">
+      {_pipeline_section()}
+    </section>
   </main>
   <footer>
-    <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
-    <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
-    <p class="footer-link">
-      <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Código fuente ↗</a>
-    </p>
+    <div class="wrap">
+      <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
+      <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
+      <p class="footer-link">
+        <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Código fuente ↗</a>
+      </p>
+    </div>
   </footer>
   <script>{_SCRIPT}</script>
 </body>

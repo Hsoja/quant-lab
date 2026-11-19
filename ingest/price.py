@@ -16,6 +16,7 @@ el precio se pueda verificar después exactamente igual que una cita del
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.error
 import urllib.request
@@ -23,6 +24,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d"
+HISTORY_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=3y"
+_TICKER_PATTERN = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_RETRIES = 2
 MIN_SECONDS_BETWEEN_REQUESTS = 1.0
@@ -50,9 +53,13 @@ class _RateLimiter:
 _rate_limiter = _RateLimiter()
 
 
-def fetch_price_chart(ticker: str) -> bytes:
-    """Descarga la respuesta cruda (JSON) del endpoint de gráficas."""
-    url = CHART_URL.format(ticker=ticker.strip().upper())
+def fetch_price_chart(ticker: str, *, history: bool = False) -> bytes:
+    """Descarga la respuesta cruda (JSON) del endpoint de gráficas.
+    history=True pide ~3 años de cierres diarios (para μ/σ de la simulación)."""
+    symbol = ticker.strip().upper()
+    if not _TICKER_PATTERN.match(symbol):
+        raise PriceAccessError(f"Ticker no válido: {ticker!r}")
+    url = (HISTORY_URL if history else CHART_URL).format(ticker=symbol)
     if not url.startswith("https://"):
         raise PriceAccessError(f"Esquema de URL no permitido: {url}")
     headers = {"User-Agent": _USER_AGENT}
@@ -115,3 +122,22 @@ def parse_latest_price(raw: bytes) -> PricePoint | None:
 
     as_of = datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime("%Y-%m-%d")
     return PricePoint(price=price, currency=currency, as_of=as_of, frase_exacta=frase_exacta)
+
+
+def parse_daily_closes(raw: bytes) -> list[float] | None:
+    """Cierres diarios (en orden) de la respuesta cruda. None si no se pudo
+    interpretar. Los días sin cierre (null) se descartan; nunca se rellenan
+    ni se interpolan."""
+    try:
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+        closes = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(closes, list) or not closes:
+        return None
+    try:
+        values = [float(c) for c in closes if c is not None]
+    except (TypeError, ValueError):
+        return None
+    # Yahoo a veces trae días sin cierre (null): se descartan, no se inventan.
+    return values or None

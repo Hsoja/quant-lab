@@ -65,3 +65,14 @@ se hicieron con un cambio acotado y explícito:
   seguridad — solo contenido.
 
 Revisar y ampliar esta tabla en cada fase que añada una superficie nueva.
+
+## Diseño v2 (Capa B Monte Carlo + diario)
+
+- **Hecho: sin superficie nueva de red.** La simulación corre 100 % en el navegador con datos ya
+  embebidos; no hay `fetch`, formularios, `localStorage` ni cookies (comprobado por pruebas). La CSP
+  sigue igual (script por hash SHA-256, sin `'unsafe-inline'` en scripts).
+- **Hecho: entradas del usuario acotadas** (precio, μ, σ, días, simulaciones, capital, semilla) antes
+  de simular; todo se pinta con `createElement`/`createElementNS` + `textContent`, nunca `innerHTML`.
+- **Hecho: descarga del diario** con `Blob` + `download` (archivo local, sin red).
+- **Hecho: ticker validado** con expresión regular antes de armar la URL de historial en
+  `ingest/price.py`. Bandit B311 (`random`) es simulación estadística, no criptografía (`# nosec`).

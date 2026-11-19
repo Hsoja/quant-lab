@@ -11,6 +11,19 @@ from extract.facts import Citation, CitedValue
 from report.html_report import build_html_report
 
 
+def _node_check(js: str, tmp_dir=None):
+    """`node --check` sobre un archivo temporal (/dev/stdin no existe en todos los entornos)."""
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(js)
+        path = fh.name
+    try:
+        return subprocess.run(["node", "--check", path], capture_output=True, text=True, timeout=10)
+    finally:
+        import os
+        os.unlink(path)
+
+
 def _cv(value, label, citation_text=None, derivado=False, nota=""):
     citation = (
         Citation(doc_id="CIK0-0001", seccion="Estado de resultados", frase_exacta=citation_text, hash="h")
@@ -101,6 +114,7 @@ def test_html_report_has_strict_csp_and_no_external_resources():
     assert all(
         "Content-Security-Policy" in line
         or "tradingview.com" in line
+        or "www.w3.org/2000/svg" in line  # identificador de espacio de nombres SVG, no un recurso
         or ("github.com/Hsoja/quant-lab" in line and 'rel="noopener noreferrer"' in line)
         for line in http_links
     )
@@ -184,10 +198,7 @@ def test_inline_script_has_no_syntax_errors():
     )
     script_match = re.search(r"<script>(.*?)</script>", html, re.DOTALL)
     assert script_match
-    result = subprocess.run(
-        ["node", "--check", "/dev/stdin"],
-        input=script_match.group(1), capture_output=True, text=True, timeout=10,
-    )
+    result = _node_check(script_match.group(1))
     assert result.returncode == 0, result.stderr
 
 
@@ -295,10 +306,7 @@ def test_try_it_section_js_has_no_syntax_errors():
     assert script_match
     if shutil.which("node") is None:
         pytest.skip("node no está disponible en este entorno")
-    result = subprocess.run(
-        ["node", "--check", "/dev/stdin"],
-        input=script_match.group(1), capture_output=True, text=True, timeout=10,
-    )
+    result = _node_check(script_match.group(1))
     assert result.returncode == 0, result.stderr
 
 
@@ -338,3 +346,91 @@ def test_chat_section_warns_it_is_not_a_live_chat_and_never_recommends():
     assert "no es un chat en vivo" in html
     for forbidden in ("compra esta acción", "vende ahora", "recomendamos comprar"):
         assert forbidden not in html.lower()
+
+
+# --- Diseño v2: capas, simulación y diario ---------------------------------
+
+def _plain_html(companies=None):
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    return build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=companies,
+    )
+
+
+def test_layers_are_ordered_and_separated_by_a_frontier():
+    html = _plain_html()
+    assert html.index("CAPA A · HECHOS VERIFICADOS") < html.index('role="separator"') < html.index("CAPA B · SIMULADO")
+    assert html.index("CAPA B · SIMULADO") < html.index('id="diario"')
+
+
+def test_simulation_layer_has_no_citations_and_says_it_is_not_a_prediction():
+    html = _plain_html()
+    layer_b = html[html.index('id="simulacion"'):html.index('id="diario"')]
+    assert "no un hecho ni una predicción" in layer_b
+    assert "<blockquote" not in layer_b  # nada citado dentro de lo simulado
+    assert "no están validadas" in layer_b or "no están validadas con un" in layer_b
+
+
+def test_layer_a_has_no_simulated_numbers():
+    html = _plain_html()
+    layer_a = html[html.index('id="reporte"'):html.index('role="separator"')]
+    for word in ("Monte Carlo", "VaR 95", "P50", "SIMULADO"):
+        assert word not in layer_a
+
+
+def test_diary_keeps_fact_and_scenario_in_separate_fields_and_never_stores():
+    html = _plain_html()
+    assert 'id="diary-fact"' in html and 'id="diary-scenario"' in html
+    assert 'maxlength="1000"' in html
+    for forbidden in ("localStorage", "sessionStorage", "document.cookie", "XMLHttpRequest", "fetch("):
+        assert forbidden not in html
+    assert "<form" not in html.lower()
+
+
+def test_figure_cards_expose_labels_for_the_diary():
+    html = _plain_html()
+    assert 'data-figure-label="Ingresos"' in html
+
+
+def test_monte_carlo_math_is_correct_in_node():
+    """Corre el motor de simulación del navegador en Node y revisa propiedades matemáticas."""
+    import json
+    import re as _re
+    from report.html_report import _SCRIPT
+
+    start = _SCRIPT.index("function mulberry32")
+    end = _SCRIPT.index("// --- Panel de simulación")
+    math_js = _SCRIPT[start:end]
+    assert "document." not in math_js and "window." not in math_js
+    program = (
+        math_js
+        + """
+var base = { s0: 100, mu: 0.1, sigma: 0.0, days: 252, paths: 200, capital: 1000, seed: 7 };
+var flat = summarize(simulateGBM(base));
+var noisy = summarize(simulateGBM({ s0: 100, mu: 0.1, sigma: 0.3, days: 90, paths: 4000, capital: 1000, seed: 7 }));
+var again = summarize(simulateGBM({ s0: 100, mu: 0.1, sigma: 0.3, days: 90, paths: 4000, capital: 1000, seed: 7 }));
+var other = summarize(simulateGBM({ s0: 100, mu: 0.1, sigma: 0.3, days: 90, paths: 4000, capital: 1000, seed: 8 }));
+console.log(JSON.stringify({ flat: flat.p50, flatSpread: flat.p95 - flat.p5, noisy: noisy, same: noisy.p50 === again.p50, diff: noisy.p50 !== other.p50 }));
+"""
+    )
+    import subprocess, tempfile, os
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as fh:
+        fh.write(program)
+        path = fh.name
+    try:
+        out = subprocess.run(["node", path], capture_output=True, text=True, timeout=30)
+    finally:
+        os.unlink(path)
+    assert out.returncode == 0, out.stderr
+    data = json.loads(out.stdout)
+    assert abs(data["flat"] - 1000 * 2.718281828459045 ** 0.1) < 1e-6  # sigma=0: determinista
+    assert data["flatSpread"] < 1e-6
+    n = data["noisy"]
+    assert n["p5"] < n["p50"] < n["p95"]
+    assert 0 <= n["pLoss10"] <= 1 and 0 <= n["pUp"] <= 1 and n["pGain20"] <= n["pUp"]
+    assert n["var95"] >= 0
+    assert abs(n["var95"] - max(0, 1000 - n["p5"])) < 1e-9
+    assert sum(n["hist"]["bins"]) == 4000
+    assert data["same"] and data["diff"]

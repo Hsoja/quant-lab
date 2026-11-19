@@ -22,10 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv  # noqa: E402
 
 from calc.fcf import compute_fcf, compute_revenue_cagr  # noqa: E402
+from calc.montecarlo import compute_return_stats  # noqa: E402
 from calc.valuation import compute_valuation  # noqa: E402
 from extract.facts import Citation, CitedValue, extract_core_facts  # noqa: E402
 from ingest.edgar import download_filing, get_cik, list_10k_filings, save_filing, sha256_hex  # noqa: E402
-from ingest.price import fetch_price_chart, parse_latest_price  # noqa: E402
+from ingest.price import fetch_price_chart, parse_daily_closes, parse_latest_price  # noqa: E402
 from verify.verifier import verify_all  # noqa: E402
 
 TICKERS = ["SPGI", "COST", "AAPL", "UBER"]
@@ -150,6 +151,32 @@ def build_qa(verified: dict, fcf, cagr, valuation) -> list[dict]:
     return qa
 
 
+def build_monte_carlo(ticker: str, price: float | None, price_as_of: str | None) -> dict | None:
+    """μ y σ históricos para la simulación (Capa B, SIMULADO). None si la
+    fuente falla o hay pocos datos: la página entonces pide supuestos
+    manuales marcados "no verificado" — nunca se inventan."""
+    if price is None:
+        return None
+    try:
+        raw = fetch_price_chart(ticker, history=True)
+        closes = parse_daily_closes(raw)
+    except Exception as exc:
+        print(f"  historial no disponible para {ticker}: {exc}", file=sys.stderr)
+        return None
+    stats = compute_return_stats(closes) if closes else None
+    if stats is None:
+        return None
+    return {
+        "s0": price,
+        "as_of": price_as_of,
+        "mu": stats.mu,
+        "sigma": stats.sigma,
+        "n_obs": stats.n_obs,
+        "source": "Yahoo Finance, cierres diarios ~3 años (fuente no oficial)",
+        "source_hash": sha256_hex(raw),
+    }
+
+
 def build_company(ticker: str) -> dict:
     cik = get_cik(ticker)
     filing = list_10k_filings(cik, limit=1)[0]
@@ -178,6 +205,8 @@ def build_company(ticker: str) -> dict:
     except Exception as exc:  # no se simula un precio si la fuente falla
         print(f"  precio no disponible para {ticker}: {exc}", file=sys.stderr)
 
+    monte_carlo = build_monte_carlo(ticker, price_value, price_as_of)
+
     valuation = compute_valuation(
         eps=verified["eps"], diluted_shares=verified["diluted_shares"], fcf_value=fcf.value,
         price=price_value, price_citation=price_citation, price_as_of=price_as_of,
@@ -197,6 +226,7 @@ def build_company(ticker: str) -> dict:
         "figures": {key: _cv_summary(verified[key]) for key, _label in _FIGURE_KEYS},
         "revenue_series": revenue_series,
         "qa": qa,
+        "monte_carlo": monte_carlo,
         "fcf": {"value": fcf.value, "nota": fcf.nota},
         "cagr": {"value": cagr.value, "nota": cagr.nota},
         "valuation": {
