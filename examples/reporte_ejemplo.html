@@ -100,6 +100,8 @@ h1, h2, h3, h4 { line-height: 1.15; margin: 0; font-weight: 700; letter-spacing:
 .pill { font-size: .76rem; font-weight: 600; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: rgba(16, 19, 38, .6); white-space: nowrap; }
 .ticker { height: 46px; border-bottom: 1px solid var(--line); background: rgba(6, 7, 13, .5); }
 .ticker iframe { width: 100%; height: 46px; border: 0; display: block; }
+/* iframes keep the default color-scheme: if it differed from the child's, browsers paint an opaque white backdrop behind the transparent TradingView widgets */
+iframe { color-scheme: normal; }
 .strip { font-size: .82rem; color: var(--muted); border-bottom: 1px solid var(--line); background: rgba(13, 15, 30, .55); }
 .strip .wrap { padding-top: 7px; padding-bottom: 7px; }
 
@@ -402,7 +404,7 @@ footer p { margin: 4px 0; }
       <div class="chips">
         <span class="pill">SPGI</span>
         <span class="pill">CIK0000064040-0000064040-26-000013</span>
-        <span class="pill">generado 2026-11-19 03:45 UTC</span>
+        <span class="pill">generado 2026-11-19 03:47 UTC</span>
       </div>
       <div class="hero-cta">
         <a class="btn" href="#reporte">Ver el reporte ↓</a>
