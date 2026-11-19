@@ -93,10 +93,17 @@ def test_html_report_has_strict_csp_and_no_external_resources():
     assert "<link " not in html.lower()
     assert "cdn." not in html.lower()
     assert "fonts.googleapis" not in html.lower()
-    # El único enlace a https:// permitido es la navegación, decidida por la persona,
-    # al propio repositorio del proyecto — nunca una carga automática de un recurso.
+    # El único https:// permitido fuera de la CSP es: el enlace al repositorio
+    # (navegación decidida por la persona) y las referencias a TradingView dentro
+    # del <script> (solo se usan para armar el src de un <iframe> con sandbox,
+    # nunca un script ni un estilo cargado por nuestra cuenta).
     http_links = [line for line in html.splitlines() if "http://" in line or "https://" in line]
-    assert all("github.com/Hsoja/quant-lab" in line and 'rel="noopener noreferrer"' in line for line in http_links)
+    assert all(
+        "Content-Security-Policy" in line
+        or "tradingview.com" in line
+        or ("github.com/Hsoja/quant-lab" in line and 'rel="noopener noreferrer"' in line)
+        for line in http_links
+    )
 
 
 def test_html_report_has_no_dangerous_js_patterns():
@@ -293,3 +300,41 @@ def test_try_it_section_js_has_no_syntax_errors():
         input=script_match.group(1), capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _sample_companies_with_qa():
+    companies = _sample_companies()
+    companies["FAKE"]["tradingview_symbol"] = "NYSE:FAKE"
+    companies["FAKE"]["qa"] = [
+        {"pregunta": "¿Cómo le fue en ingresos?", "respuesta": "Los ingresos fueron de US$ 1,100,000,000."},
+        {"pregunta": "¿Cuál es el riesgo?", "respuesta": "El FCF no se pudo calcular (no verificado)."},
+    ]
+    return companies
+
+
+def test_live_widgets_use_sandboxed_iframe_with_no_dangerous_permissions():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=_sample_companies_with_qa(),
+    )
+    assert "sandbox" in html
+    for dangerous in ("allow-forms", "allow-top-navigation", "allow-modals", "allow-pointer-lock"):
+        assert dangerous not in html
+    assert "embed-widget/" in html
+    assert '"symbol-overview"' in html
+    assert '"timeline"' in html
+    assert "SYMBOL_PATTERN" in html  # el símbolo se valida antes de armar la URL
+
+
+def test_chat_section_warns_it_is_not_a_live_chat_and_never_recommends():
+    verified = _verified_fixture()
+    fcf, cagr = _fcf_cagr()
+    html = build_html_report(
+        empresa_ejemplo="Empresa de Ejemplo", filing_doc_id="CIK0-0001",
+        verified=verified, fcf=fcf, cagr=cagr, companies=_sample_companies_with_qa(),
+    )
+    assert "no es un chat en vivo" in html
+    for forbidden in ("compra esta acción", "vende ahora", "recomendamos comprar"):
+        assert forbidden not in html.lower()

@@ -241,6 +241,35 @@ SPGI, COST, AAPL, UBER. Mezcla a propósito: COST y SPGI salen con todas las cif
 UBER muestran ΔWK (y por lo tanto FCF y FCF yield) como "no verificado" — bueno para demostrar que
 el sistema no inventa cuando falta una fuente.
 
+### 9.6 Chat de preguntas — nunca en vivo
+
+Pedido explícito: un bot al que preguntarle "qué opina" de una empresa, con tesis y bases. Se
+descartó un chat en vivo (necesitaría un servidor con la llave de la API, que cualquier visitante
+podría agotar — la misma superficie de ataque que el proyecto evita desde el principio). En su
+lugar, `scripts/precompute_examples.py` arma 3 preguntas y respuestas por empresa de ejemplo
+(`build_qa`), **generadas por código a partir de las mismas cifras ya verificadas** (nunca una
+llamada a un LLM, nunca un número que no esté ya citado arriba en la misma página): crecimiento de
+ingresos, lectura simple de valoración, y un riesgo específico (si la utilidad neta supera por
+mucho al EBITDA, se señala como posible ganancia no recurrente — la misma "trampa" que el manual de
+inversión advierte para un ratio visto de un solo vistazo). La página solo muestra estas respuestas
+ya escritas; no hay ningún campo de texto libre ni ninguna llamada de red al hacer una pregunta.
+Regla 4 sigue aplicando: ninguna respuesta dice "compra" ni "vende".
+
+### 9.7 Gráfica y noticias en vivo (TradingView, iframe)
+
+Mismo patrón que TradePro: widgets de TradingView como `<iframe>` con `sandbox` (nunca el script
+de TradingView, para no tocar `script-src`). La CSP agrega `frame-src https://s.tradingview.com`
+— el único cambio real a la superficie de seguridad de esta fase. El símbolo (ej. `NYSE:SPGI`) se
+valida con una expresión regular antes de armar la URL del iframe, y la bolsa de cada empresa de
+ejemplo se documenta a mano en `scripts/precompute_examples.py` (`_EXCHANGE_BY_TICKER`) — no se
+autodetecta. El contenido de esos widgets es de TradingView, no de este proyecto: no se verifica
+ni se cita, y la página lo dice explícitamente.
+
+### 9.8 Sección de confianza retirada
+
+A pedido explícito, se quitó la sección "Por qué puedes confiar en esta página" y sus 3 tarjetas.
+El enlace al código fuente se movió al pie de página, sin la sección alrededor.
+
 ## 10. Historial
 
 - 2026-11-17 — v1. Creado para el bloque de arranque. Empresa de ejemplo y fuente elegidas,
@@ -272,3 +301,7 @@ el sistema no inventa cuando falta una fuente.
   el navegador. Repo publicado como público en GitHub (decisión explícita, fuera del alcance
   original "privado por ahora" de la sección 7): `github.com/Hsoja/quant-lab`, página en
   `hsoja.github.io/quant-lab`.
+- 2026-11-18 — v1.5. Rediseño estilo tablero (tarjetas grandes, gráfica de ingresos en SVG propio),
+  gráfica y noticias en vivo de TradingView por iframe (sección 9.7), chat de preguntas ya
+  preparadas con tesis y riesgo por empresa (sección 9.6, nunca en vivo, nunca compra/vende), y se
+  retiró la sección "Por qué puedes confiar en esta página" (sección 9.8).

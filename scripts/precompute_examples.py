@@ -30,6 +30,10 @@ from verify.verifier import verify_all  # noqa: E402
 
 TICKERS = ["SPGI", "COST", "AAPL", "UBER"]
 
+# Bolsa de cada ticker, para el símbolo de TradingView (ver SPEC.md 9.7). Se
+# documenta a mano porque son solo 4 tickers conocidos — no se auto-detecta.
+_EXCHANGE_BY_TICKER = {"SPGI": "NYSE", "COST": "NASDAQ", "AAPL": "NASDAQ", "UBER": "NYSE"}
+
 _FIGURE_KEYS = (
     ("revenue", "Ingresos"),
     ("operating_income", "Utilidad operativa"),
@@ -59,6 +63,91 @@ def _citation_summary(citation: Citation | None) -> dict | None:
     if citation is None:
         return None
     return {"doc_id": citation.doc_id, "seccion": citation.seccion, "frase_exacta": citation.frase_exacta}
+
+
+def _fmt_usd(value: float | None) -> str:
+    return f"US$ {value:,.0f}" if value is not None else "no verificado"
+
+
+def _fmt_pct(value: float | None) -> str:
+    return f"{value * 100:.2f}%" if value is not None else "no verificado"
+
+
+def _riesgo_especifico(verified: dict, fcf) -> str:
+    """Una observación de riesgo grounded en las cifras reales — nunca un
+    texto genérico de relleno. Revisa primero las trampas más informativas
+    (la misma lógica que el manual de inversión: un solo número nunca basta)."""
+    net_income = verified["net_income"].value
+    ebitda = verified["ebitda"].value
+    wk = verified["working_capital_change"]
+    capex = verified["capex"].value
+
+    if net_income is not None and ebitda is not None and ebitda > 0 and net_income > ebitda * 1.3:
+        return (
+            f"Ojo con esta: la utilidad neta ({_fmt_usd(net_income)}) es más alta que el EBITDA "
+            f"({_fmt_usd(ebitda)}). Eso suele significar que hay una ganancia que no es del negocio "
+            "normal (un ajuste contable, una venta de activos, algo que no se repite), no solo más "
+            "ventas — la misma trampa de mirar un solo número de un solo vistazo. Vale la pena revisar "
+            'la nota de "otros ingresos" del reporte antes de confiar en el P/E tal cual sale aquí.'
+        )
+    if wk.no_verificado:
+        return (
+            "La variación de capital de trabajo sale \"no verificado\" en este reporte (no publica una "
+            "línea agregada), así que el flujo de caja libre tampoco se pudo calcular — es una limitación "
+            "real de los datos disponibles, no un juicio sobre la empresa. El siguiente paso para completar "
+            "esta tesis sería revisar el estado de flujo de efectivo completo del 10-K."
+        )
+    if fcf.value is not None and capex is not None and capex > fcf.value * 0.8:
+        return (
+            f"El CAPEX ({_fmt_usd(capex)}) es grande frente al FCF ({_fmt_usd(fcf.value)}) — una empresa "
+            "que está invirtiendo mucho en expandirse. Vale la pena vigilar que ese ritmo de inversión no "
+            "empiece a crecer más rápido que las ventas (una de las señales de alerta del manual de "
+            "inversión: inversión que crece más rápido que las ventas)."
+        )
+    return (
+        "No se detectó, con las cifras ya citadas, ninguna señal mecánica obvia como las de arriba — pero "
+        "eso no significa que no haya riesgo: esta prueba no revisa el sector, la competencia ni las 7 "
+        "señales de alerta completas del manual de inversión."
+    )
+
+
+def build_qa(verified: dict, fcf, cagr, valuation) -> list[dict]:
+    """Preguntas y respuestas ya preparadas para el apartado de chat
+    (SPEC.md sección 9.6): nunca una llamada en vivo al LLM, pero cada
+    número que aparece sale de las mismas cifras ya verificadas de arriba —
+    nunca un texto de relleno con números inventados."""
+    revenue = verified["revenue"]
+    qa = []
+
+    if cagr.value is not None:
+        crecimiento = (
+            f"Los ingresos del periodo más reciente fueron de {_fmt_usd(revenue.value)}. El CAGR de "
+            f"ingresos entre {cagr.inicio.period_end} y {cagr.fin.period_end} ({cagr.years:.2f} años, los "
+            f"que trae citados este mismo reporte) fue de {_fmt_pct(cagr.value)}."
+        )
+    else:
+        crecimiento = f"Los ingresos del periodo más reciente fueron de {_fmt_usd(revenue.value)}. El crecimiento (CAGR) sale \"no verificado\": {cagr.nota}"
+    qa.append({"pregunta": "¿Cómo le fue en ingresos y crecimiento?", "respuesta": crecimiento})
+
+    if valuation.price is not None:
+        pe_text = f"{valuation.pe:.1f}" if valuation.pe is not None else "no verificado"
+        fcfy_text = _fmt_pct(valuation.fcf_yield)
+        valoracion = (
+            f"Con el precio de cierre del {valuation.price_as_of} (US$ {valuation.price:.2f}), el P/E sale "
+            f"en {pe_text} y el FCF yield en {fcfy_text}. Con los dos umbrales fijos de esta prueba (P/E ≤ 20 "
+            'o FCF yield ≥ 5% para "barata"; P/E ≥ 30 o FCF yield < 2% para "cara"), queda marcada '
+            f'"{valuation.veredicto}". Es una lectura mecánica y simple, no la metodología completa del '
+            "manual de inversión."
+        )
+    else:
+        valoracion = "No se pudo obtener el precio de la fuente no oficial en este momento (no verificado)."
+    qa.append({"pregunta": "¿Qué tan cara o barata se ve con los números simples?", "respuesta": valoracion})
+
+    qa.append({
+        "pregunta": "¿Cuál es el principal riesgo o qué la invalidaría?",
+        "respuesta": _riesgo_especifico(verified, fcf),
+    })
+    return qa
 
 
 def build_company(ticker: str) -> dict:
@@ -93,12 +182,21 @@ def build_company(ticker: str) -> dict:
         eps=verified["eps"], diluted_shares=verified["diluted_shares"], fcf_value=fcf.value,
         price=price_value, price_citation=price_citation, price_as_of=price_as_of,
     )
+    qa = build_qa(verified, fcf, cagr, valuation)
+    revenue_series = [
+        {"period_end": cv.period_end, "value": cv.value}
+        for cv in verified["revenue_series"]
+        if cv.value is not None
+    ]
 
     return {
         "ticker": ticker,
+        "tradingview_symbol": f"{_EXCHANGE_BY_TICKER[ticker]}:{ticker}",
         "filing_doc_id": filing.doc_id,
         "report_date": filing.report_date,
         "figures": {key: _cv_summary(verified[key]) for key, _label in _FIGURE_KEYS},
+        "revenue_series": revenue_series,
+        "qa": qa,
         "fcf": {"value": fcf.value, "nota": fcf.nota},
         "cagr": {"value": cagr.value, "nota": cagr.nota},
         "valuation": {

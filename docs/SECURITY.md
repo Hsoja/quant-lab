@@ -43,4 +43,25 @@ página web. Ninguna de las dos cambia el modelo de amenazas de fondo:
   arrancó (clase `.js-ready`), para que un futuro fallo del script, por cualquier motivo, no vuelva
   a dejar la página en blanco.
 
+## Actualización — gráfica/noticias en vivo y chat de preguntas (SPEC.md 9.6-9.8)
+
+Dos adiciones que se consideraron y se descartaron por abrir superficie nueva de verdad, y dos que
+se hicieron con un cambio acotado y explícito:
+
+- **Descartado: chat en vivo con un LLM.** Necesitaría un servidor con la llave de la API guardada
+  en secreto, y cualquier visitante anónimo podría agotar la cuota o generar costo sin control. En
+  vez de eso, las respuestas del chat (sección 9.6) se generan por código, en el build, a partir de
+  las mismas cifras ya verificadas — la página nunca llama a un LLM ni a ningún servidor propio.
+- **Descartado: calcular cualquier ticker en vivo.** Mismo problema: requeriría un backend público
+  sin autenticación. La página sigue limitada a las empresas precalculadas.
+- **Hecho: `frame-src https://s.tradingview.com`** (sección 9.7). Es el único cambio real a la CSP
+  en esta fase. Los widgets se embeben como `<iframe sandbox="allow-scripts allow-same-origin
+  allow-popups">` — nunca `allow-forms` ni `allow-top-navigation` — y nunca con el script de
+  TradingView (que habría exigido abrir `script-src` también). El símbolo se valida con una
+  expresión regular (`/^[A-Z]+:[A-Z.]{1,10}$/`) antes de armar la URL del iframe, aunque hoy
+  siempre venga de datos propios y conocidos (defensa en profundidad). El contenido de esos
+  widgets es de TradingView: no se verifica ni se cita, y la página lo dice.
+- **Hecho: se quitó la sección "Por qué puedes confiar..."** (sección 9.8), sin cambio de
+  seguridad — solo contenido.
+
 Revisar y ampliar esta tabla en cada fase que añada una superficie nueva.

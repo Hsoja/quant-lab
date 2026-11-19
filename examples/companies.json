@@ -1,6 +1,7 @@
 {
   "SPGI": {
     "ticker": "SPGI",
+    "tradingview_symbol": "NYSE:SPGI",
     "filing_doc_id": "CIK0000064040-0000064040-26-000013",
     "report_date": "2025-12-31",
     "figures": {
@@ -69,6 +70,34 @@
         "citation": null
       }
     },
+    "revenue_series": [
+      {
+        "period_end": "2023-12-31",
+        "value": 12497000000.0
+      },
+      {
+        "period_end": "2024-12-31",
+        "value": 14208000000.0
+      },
+      {
+        "period_end": "2025-12-31",
+        "value": 15336000000.0
+      }
+    ],
+    "qa": [
+      {
+        "pregunta": "¿Cómo le fue en ingresos y crecimiento?",
+        "respuesta": "Los ingresos del periodo más reciente fueron de US$ 15,336,000,000. El CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años, los que trae citados este mismo reporte) fue de 10.77%."
+      },
+      {
+        "pregunta": "¿Qué tan cara o barata se ve con los números simples?",
+        "respuesta": "Con el precio de cierre del 2026-11-18 (US$ 446.38), el P/E sale en 30.5 y el FCF yield en no verificado. Con los dos umbrales fijos de esta prueba (P/E ≤ 20 o FCF yield ≥ 5% para \"barata\"; P/E ≥ 30 o FCF yield < 2% para \"cara\"), queda marcada \"cara\". Es una lectura mecánica y simple, no la metodología completa del manual de inversión."
+      },
+      {
+        "pregunta": "¿Cuál es el principal riesgo o qué la invalidaría?",
+        "respuesta": "La variación de capital de trabajo sale \"no verificado\" en este reporte (no publica una línea agregada), así que el flujo de caja libre tampoco se pudo calcular — es una limitación real de los datos disponibles, no un juicio sobre la empresa. El siguiente paso para completar esta tesis sería revisar el estado de flujo de efectivo completo del 10-K."
+      }
+    ],
     "fcf": {
       "value": null,
       "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
@@ -78,22 +107,23 @@
       "nota": "CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años)."
     },
     "valuation": {
-      "price": 452.35,
-      "price_as_of": "2026-11-17",
+      "price": 446.38,
+      "price_as_of": "2026-11-18",
       "price_citation": {
         "doc_id": "YAHOO-CHART:SPGI",
-        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
-        "frase_exacta": "\"regularMarketPrice\":452.35"
+        "seccion": "Cotización de cierre, 2026-11-18 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":446.38"
       },
-      "pe": 30.86825877879669,
+      "pe": 30.46086736747931,
       "fcf_yield": null,
-      "market_cap": 138011985000.0,
+      "market_cap": 136190538000.0,
       "veredicto": "cara",
       "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
     }
   },
   "COST": {
     "ticker": "COST",
+    "tradingview_symbol": "NASDAQ:COST",
     "filing_doc_id": "CIK0000909832-0000909832-26-000093",
     "report_date": "2026-08-30",
     "figures": {
@@ -166,6 +196,34 @@
         }
       }
     },
+    "revenue_series": [
+      {
+        "period_end": "2024-09-01",
+        "value": 254453000000.0
+      },
+      {
+        "period_end": "2025-08-31",
+        "value": 275235000000.0
+      },
+      {
+        "period_end": "2026-08-30",
+        "value": 303154000000.0
+      }
+    ],
+    "qa": [
+      {
+        "pregunta": "¿Cómo le fue en ingresos y crecimiento?",
+        "respuesta": "Los ingresos del periodo más reciente fueron de US$ 303,154,000,000. El CAGR de ingresos entre 2024-09-01 y 2026-08-30 (1.99 años, los que trae citados este mismo reporte) fue de 9.18%."
+      },
+      {
+        "pregunta": "¿Qué tan cara o barata se ve con los números simples?",
+        "respuesta": "Con el precio de cierre del 2026-11-18 (US$ 1096.62), el P/E sale en 52.8 y el FCF yield en 1.15%. Con los dos umbrales fijos de esta prueba (P/E ≤ 20 o FCF yield ≥ 5% para \"barata\"; P/E ≥ 30 o FCF yield < 2% para \"cara\"), queda marcada \"cara\". Es una lectura mecánica y simple, no la metodología completa del manual de inversión."
+      },
+      {
+        "pregunta": "¿Cuál es el principal riesgo o qué la invalidaría?",
+        "respuesta": "El CAPEX (US$ 6,435,000,000) es grande frente al FCF (US$ 5,617,000,000) — una empresa que está invirtiendo mucho en expandirse. Vale la pena vigilar que ese ritmo de inversión no empiece a crecer más rápido que las ventas (una de las señales de alerta del manual de inversión: inversión que crece más rápido que las ventas)."
+      }
+    ],
     "fcf": {
       "value": 5617000000.0,
       "nota": "FCF = EBITDA (derivado) − impuestos (devengado) − CAPEX − ΔWK."
@@ -175,22 +233,23 @@
       "nota": "CAGR de ingresos entre 2024-09-01 y 2026-08-30 (1.99 años)."
     },
     "valuation": {
-      "price": 1110.08,
-      "price_as_of": "2026-11-17",
+      "price": 1096.62,
+      "price_as_of": "2026-11-18",
       "price_citation": {
         "doc_id": "YAHOO-CHART:COST",
-        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
-        "frase_exacta": "\"regularMarketPrice\":1110.08"
+        "seccion": "Cotización de cierre, 2026-11-18 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":1096.62"
       },
-      "pe": 53.47382659440711,
-      "fcf_yield": 0.011385437149379576,
-      "market_cap": 493349524159.99994,
+      "pe": 52.82544295902883,
+      "fcf_yield": 0.011525182899074685,
+      "market_cap": 487367536739.99994,
       "veredicto": "cara",
       "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
     }
   },
   "AAPL": {
     "ticker": "AAPL",
+    "tradingview_symbol": "NASDAQ:AAPL",
     "filing_doc_id": "CIK0000320193-0000320193-26-000026",
     "report_date": "2026-09-26",
     "figures": {
@@ -259,6 +318,34 @@
         "citation": null
       }
     },
+    "revenue_series": [
+      {
+        "period_end": "2024-09-28",
+        "value": 391035000000.0
+      },
+      {
+        "period_end": "2025-09-27",
+        "value": 416161000000.0
+      },
+      {
+        "period_end": "2026-09-26",
+        "value": 478834000000.0
+      }
+    ],
+    "qa": [
+      {
+        "pregunta": "¿Cómo le fue en ingresos y crecimiento?",
+        "respuesta": "Los ingresos del periodo más reciente fueron de US$ 478,834,000,000. El CAGR de ingresos entre 2024-09-28 y 2026-09-26 (1.99 años, los que trae citados este mismo reporte) fue de 10.70%."
+      },
+      {
+        "pregunta": "¿Qué tan cara o barata se ve con los números simples?",
+        "respuesta": "Con el precio de cierre del 2026-11-18 (US$ 352.45), el P/E sale en 39.3 y el FCF yield en no verificado. Con los dos umbrales fijos de esta prueba (P/E ≤ 20 o FCF yield ≥ 5% para \"barata\"; P/E ≥ 30 o FCF yield < 2% para \"cara\"), queda marcada \"cara\". Es una lectura mecánica y simple, no la metodología completa del manual de inversión."
+      },
+      {
+        "pregunta": "¿Cuál es el principal riesgo o qué la invalidaría?",
+        "respuesta": "La variación de capital de trabajo sale \"no verificado\" en este reporte (no publica una línea agregada), así que el flujo de caja libre tampoco se pudo calcular — es una limitación real de los datos disponibles, no un juicio sobre la empresa. El siguiente paso para completar esta tesis sería revisar el estado de flujo de efectivo completo del 10-K."
+      }
+    ],
     "fcf": {
       "value": null,
       "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
@@ -268,22 +355,23 @@
       "nota": "CAGR de ingresos entre 2024-09-28 y 2026-09-26 (1.99 años)."
     },
     "valuation": {
-      "price": 351.91,
-      "price_as_of": "2026-11-17",
+      "price": 352.45,
+      "price_as_of": "2026-11-18",
       "price_citation": {
         "doc_id": "YAHOO-CHART:AAPL",
-        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
-        "frase_exacta": "\"regularMarketPrice\":351.91"
+        "seccion": "Cotización de cierre, 2026-11-18 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":352.45"
       },
-      "pe": 39.192153466691884,
+      "pe": 39.25229316966143,
       "fcf_yield": null,
-      "market_cap": 5180222884460.0,
+      "market_cap": 5188171849700.0,
       "veredicto": "cara",
       "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
     }
   },
   "UBER": {
     "ticker": "UBER",
+    "tradingview_symbol": "NYSE:UBER",
     "filing_doc_id": "CIK0001543151-0001543151-26-000015",
     "report_date": "2025-12-31",
     "figures": {
@@ -352,6 +440,34 @@
         "citation": null
       }
     },
+    "revenue_series": [
+      {
+        "period_end": "2023-12-31",
+        "value": 37281000000.0
+      },
+      {
+        "period_end": "2024-12-31",
+        "value": 43978000000.0
+      },
+      {
+        "period_end": "2025-12-31",
+        "value": 52017000000.0
+      }
+    ],
+    "qa": [
+      {
+        "pregunta": "¿Cómo le fue en ingresos y crecimiento?",
+        "respuesta": "Los ingresos del periodo más reciente fueron de US$ 52,017,000,000. El CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años, los que trae citados este mismo reporte) fue de 18.11%."
+      },
+      {
+        "pregunta": "¿Qué tan cara o barata se ve con los números simples?",
+        "respuesta": "Con el precio de cierre del 2026-11-18 (US$ 68.76), el P/E sale en 14.5 y el FCF yield en no verificado. Con los dos umbrales fijos de esta prueba (P/E ≤ 20 o FCF yield ≥ 5% para \"barata\"; P/E ≥ 30 o FCF yield < 2% para \"cara\"), queda marcada \"barata\". Es una lectura mecánica y simple, no la metodología completa del manual de inversión."
+      },
+      {
+        "pregunta": "¿Cuál es el principal riesgo o qué la invalidaría?",
+        "respuesta": "Ojo con esta: la utilidad neta (US$ 10,053,000,000) es más alta que el EBITDA (US$ 6,284,000,000). Eso suele significar que hay una ganancia que no es del negocio normal (un ajuste contable, una venta de activos, algo que no se repite), no solo más ventas — la misma trampa de mirar un solo número de un solo vistazo. Vale la pena revisar la nota de \"otros ingresos\" del reporte antes de confiar en el P/E tal cual sale aquí."
+      }
+    ],
     "fcf": {
       "value": null,
       "nota": "FCF no se calcula: falta(n) Variación de capital de trabajo (no verificado). No se rellena con 0 ni con un supuesto."
@@ -361,16 +477,16 @@
       "nota": "CAGR de ingresos entre 2023-12-31 y 2025-12-31 (2.00 años)."
     },
     "valuation": {
-      "price": 68.81,
-      "price_as_of": "2026-11-17",
+      "price": 68.76,
+      "price_as_of": "2026-11-18",
       "price_citation": {
         "doc_id": "YAHOO-CHART:UBER",
-        "seccion": "Cotización de cierre, 2026-11-17 (Yahoo Finance, fuente no oficial)",
-        "frase_exacta": "\"regularMarketPrice\":68.81"
+        "seccion": "Cotización de cierre, 2026-11-18 (Yahoo Finance, fuente no oficial)",
+        "frase_exacta": "\"regularMarketPrice\":68.76"
       },
-      "pe": 14.508683983885408,
+      "pe": 14.498141414503134,
       "fcf_yield": null,
-      "market_cap": 145855800090.0,
+      "market_cap": 145749815640.0,
       "veredicto": "barata",
       "nota": "Lectura automática simple (P/E y FCF yield con dos umbrales fijos): no es la metodología completa del manual de inversión (sin comparación sectorial, sin señales de alerta, sin considerar el crecimiento). Es una prueba — no te bases en esto para decidir."
     }

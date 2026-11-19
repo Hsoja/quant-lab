@@ -72,6 +72,13 @@ prices) for a short list of tickers and writes `examples/companies.json`, which 
 as a `data-json` HTML attribute (never inside a `<script>` tag) and reads client-side. See
 SPEC.md section 9 for the full decisions and limitations.
 
+For each example company it also shows a live TradingView chart and news widget (plain
+`<iframe sandbox>`, same pattern as the TradePro project — never TradingView's own script, so
+`script-src` stays untouched; only `frame-src` allows their domain) and a chat-style Q&A: 3
+questions per company with answers generated at build time from the same verified figures, never
+a live LLM call — no server holds an API key that a visitor could exhaust. Every answer follows
+the same rule as the rest of the project: thesis and risk, never "buy" or "sell".
+
 ## Running tests
 
 ```bash

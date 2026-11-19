@@ -160,6 +160,123 @@ _SCRIPT = """(function () {
       return "warn"; // "no verificado"
     }
 
+    // Gráfica y noticias en vivo: iframes aislados de TradingView (mismo
+    // patrón que TradePro). La página nunca llama a nada; el navegador de
+    // quien visita sí, directo a TradingView, dentro de un marco con
+    // sandbox. El símbolo se valida antes de armar la URL, aunque hoy
+    // siempre venga de nuestros propios datos.
+    var SYMBOL_PATTERN = /^[A-Z]+:[A-Z.]{1,10}$/;
+
+    function liveWidgetFrame(symbol, widgetPath, title, extraClass) {
+      var frame = document.createElement("iframe");
+      frame.className = "live-frame" + (extraClass ? " " + extraClass : "");
+      frame.src =
+        "https://s.tradingview.com/embed-widget/" + widgetPath + "/?symbol=" +
+        encodeURIComponent(symbol) + "&locale=es&colorTheme=light";
+      frame.loading = "lazy";
+      frame.title = title;
+      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups");
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      return frame;
+    }
+
+    function liveSection(ticker, symbol) {
+      var wrap = document.createElement("div");
+      wrap.className = "try-it-live";
+
+      var chartCard = document.createElement("div");
+      chartCard.className = "card live-card";
+      var chartTitle = document.createElement("h4");
+      chartTitle.textContent = "📈 Gráfica en vivo";
+      chartCard.appendChild(chartTitle);
+      chartCard.appendChild(liveWidgetFrame(symbol, "symbol-overview", "Gráfica en vivo de " + ticker, "live-frame-chart"));
+      wrap.appendChild(chartCard);
+
+      var newsCard = document.createElement("div");
+      newsCard.className = "card live-card";
+      var newsTitle = document.createElement("h4");
+      newsTitle.textContent = "📰 Noticias en vivo";
+      newsCard.appendChild(newsTitle);
+      newsCard.appendChild(liveWidgetFrame(symbol, "timeline", "Noticias en vivo de " + ticker, "live-frame-news"));
+      wrap.appendChild(newsCard);
+
+      var note = document.createElement("p");
+      note.className = "live-note";
+      note.textContent = "Widget externo de TradingView, no verificado por este proyecto — úsalo solo como referencia visual.";
+      wrap.appendChild(note);
+
+      return wrap;
+    }
+
+    // Chat de preguntas ya preparadas (nunca un chat en vivo: SPEC.md 9.6).
+    function askQuestion(chatLog, qa) {
+      var userBubble = document.createElement("div");
+      userBubble.className = "chat-bubble chat-bubble-user";
+      userBubble.textContent = qa.pregunta;
+      chatLog.appendChild(userBubble);
+
+      var botBubble = document.createElement("div");
+      botBubble.className = "chat-bubble chat-bubble-bot thinking";
+      botBubble.textContent = "🤖 Pensando…";
+      chatLog.appendChild(botBubble);
+      if (botBubble.scrollIntoView) {
+        botBubble.scrollIntoView({ behavior: prefersReduced ? "auto" : "smooth", block: "nearest" });
+      }
+
+      window.setTimeout(
+        function () {
+          botBubble.classList.remove("thinking");
+          botBubble.textContent = qa.respuesta;
+        },
+        prefersReduced ? 0 : 750
+      );
+    }
+
+    function chatSection(ticker, qaList) {
+      var card = document.createElement("div");
+      card.className = "chat-card";
+
+      var head = document.createElement("div");
+      head.className = "chat-head";
+      var avatar = document.createElement("span");
+      avatar.className = "bot-avatar bot-avatar-sm";
+      avatar.setAttribute("aria-hidden", "true");
+      avatar.textContent = "🤖";
+      head.appendChild(avatar);
+      var headTitle = document.createElement("strong");
+      headTitle.textContent = "Pregúntale al pipeline sobre " + ticker;
+      head.appendChild(headTitle);
+      card.appendChild(head);
+
+      var warn = document.createElement("p");
+      warn.className = "chat-warn";
+      warn.textContent =
+        "Respuestas ya preparadas con las cifras de arriba — no es un chat en vivo, nunca dice " +
+        '"compra" ni "vende".';
+      card.appendChild(warn);
+
+      var log = document.createElement("div");
+      log.className = "chat-log";
+      card.appendChild(log);
+
+      var buttons = document.createElement("div");
+      buttons.className = "chat-buttons";
+      qaList.forEach(function (qa) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chat-question-btn";
+        btn.textContent = qa.pregunta;
+        btn.addEventListener("click", function () {
+          askQuestion(log, qa);
+          btn.disabled = true;
+        });
+        buttons.appendChild(btn);
+      });
+      card.appendChild(buttons);
+
+      return card;
+    }
+
     function renderResult(ticker) {
       var company = companies[ticker];
       clear(resultEl);
@@ -206,6 +323,13 @@ _SCRIPT = """(function () {
             figuresWrap.appendChild(figureRow(company.figures[key]));
           });
           resultEl.appendChild(figuresWrap);
+
+          if (company.tradingview_symbol && SYMBOL_PATTERN.test(company.tradingview_symbol)) {
+            resultEl.appendChild(liveSection(ticker, company.tradingview_symbol));
+          }
+          if (company.qa && company.qa.length) {
+            resultEl.appendChild(chatSection(ticker, company.qa));
+          }
         },
         prefersReduced ? 0 : 650
       );
@@ -243,11 +367,14 @@ def _sha256_b64(text: str) -> str:
 
 _SCRIPT_HASH = _sha256_b64(_SCRIPT)
 
+_TRADINGVIEW_ORIGIN = "https://s.tradingview.com"
+
 _CSP = (
     "default-src 'none'; "
     "style-src 'self' 'unsafe-inline'; "
     f"script-src 'self' 'sha256-{_SCRIPT_HASH}'; "
     "img-src 'self'; "
+    f"frame-src {_TRADINGVIEW_ORIGIN}; "
     "base-uri 'none'; "
     "form-action 'none'; "
     "frame-ancestors 'none'"
@@ -326,12 +453,7 @@ _STYLE = """
   .step-arrow { align-self: center; color: var(--accent); font-size: 1.3rem; flex: 0 0 auto; }
   @media (max-width: 720px) { .step-arrow { transform: rotate(90deg); } }
 
-  .trust-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
-  .trust-card { background: var(--surface); border: 1px solid var(--surface-2); border-radius: var(--radius); padding: 1.1rem; }
-  .trust-icon { font-size: 1.5rem; margin-bottom: .3rem; }
-  .trust-card h3 { margin: 0 0 .3rem; font-size: .95rem; }
-  .trust-card p { margin: 0; font-size: .85rem; color: var(--muted); }
-  .trust-link { text-align: center; font-size: .9rem; }
+  .footer-link { text-align: center; font-size: .85rem; margin-top: .5rem; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
   .calc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
@@ -354,6 +476,26 @@ _STYLE = """
     margin: .4rem 0 0; padding: .5rem .75rem; background: #ffffff;
     border-left: 3px solid var(--accent); border-radius: 6px; font-style: italic;
   }
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+  .stat-card {
+    background: #ffffff; border: 1px solid var(--surface-2); border-radius: var(--radius);
+    padding: 1.1rem; display: flex; align-items: center; gap: .85rem;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  }
+  .stat-icon {
+    flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
+    background: var(--surface); display: flex; align-items: center; justify-content: center; font-size: 1.2rem;
+  }
+  .stat-label { color: var(--muted); font-size: .78rem; margin: 0 0 .15rem; }
+  .stat-value { font-size: 1.35rem; font-weight: 700; margin: 0; color: var(--text); }
+  .chart-card { padding: 1.25rem 1.25rem 0.5rem; }
+  .line-chart { width: 100%; height: auto; display: block; }
+  .chart-line { stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+  .chart-dot { fill: var(--accent-dark); }
+  .chart-fade-start { stop-color: var(--accent); stop-opacity: .35; }
+  .chart-fade-end { stop-color: var(--accent); stop-opacity: 0; }
+  .chart-value-label { font-size: 11px; fill: var(--accent-dark); font-weight: 600; }
+  .chart-year-label { font-size: 11px; fill: var(--muted); }
   .badge { font-size: .7rem; padding: .15rem .5rem; border-radius: 999px; white-space: nowrap; }
   .badge-ok { background: #dcfce7; color: #166534; }
   .badge-info { background: #dbeafe; color: #1e40af; }
@@ -394,6 +536,35 @@ _STYLE = """
   .thinking { color: var(--muted); }
   .thinking::after { content: ""; animation: thinking-dots 1.2s steps(4, end) infinite; }
   @keyframes thinking-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+
+  .try-it-live { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+  .live-card { padding: .85rem; }
+  .live-card h4 { margin: 0 0 .5rem; font-size: .85rem; color: var(--accent-dark); }
+  .live-frame { width: 100%; border: none; border-radius: 10px; display: block; background: #ffffff; }
+  .live-frame-chart { height: 220px; }
+  .live-frame-news { height: 280px; }
+  .live-note { grid-column: 1 / -1; font-size: .75rem; color: var(--muted); margin: 0; }
+
+  .chat-card {
+    margin-top: 1.25rem; background: var(--surface); border: 1px solid var(--surface-2);
+    border-radius: var(--radius); padding: 1.1rem;
+  }
+  .chat-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem; }
+  .bot-avatar-sm { width: 30px; height: 30px; font-size: 1rem; animation: none; }
+  .chat-warn { font-size: .78rem; color: var(--muted); margin: 0 0 .75rem; }
+  .chat-log { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .75rem; max-height: 320px; overflow-y: auto; }
+  .chat-bubble { padding: .55rem .8rem; border-radius: 12px; font-size: .88rem; max-width: 90%; }
+  .chat-bubble-user { align-self: flex-end; background: var(--accent); color: #ffffff; border-bottom-right-radius: 2px; }
+  .chat-bubble-bot { align-self: flex-start; background: #ffffff; border: 1px solid var(--surface-2); border-bottom-left-radius: 2px; }
+  .chat-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .chat-question-btn {
+    background: #ffffff; border: 1px solid var(--surface-2); border-radius: 999px; padding: .4rem .85rem;
+    font-size: .8rem; color: var(--accent-dark); cursor: pointer;
+  }
+  .chat-question-btn:hover:not(:disabled) { background: var(--surface-2); }
+  .chat-question-btn:disabled { opacity: .45; cursor: default; }
+  .chat-question-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
   @media (prefers-reduced-motion: reduce) {
     .bot-avatar { animation: none; }
     .thinking::after { animation: none; content: "..."; }
@@ -464,28 +635,6 @@ _PIPELINE_STEPS = (
     ),
 )
 
-_TRUST_POINTS = (
-    (
-        "🔒",
-        "Sin tus datos, nunca",
-        "Esta página es un archivo estático: no hay servidor, no hay formularios, no se guarda "
-        "nada en tu navegador. Solo muestra cifras públicas de una empresa de ejemplo.",
-    ),
-    (
-        "🚫",
-        "Nunca una orden de compra o venta",
-        "El objetivo es mostrar de dónde sale cada número, no decirte qué hacer con tu dinero. "
-        "Eso siempre lo decides tú, con tu propio criterio.",
-    ),
-    (
-        "🧩",
-        "Código abierto y verificable",
-        "Las reglas de este sistema (qué se cita, cómo se calcula cada cifra, cómo se verifica) "
-        "están escritas y versionadas — no son una caja negra.",
-    ),
-)
-
-
 def _esc(value: object) -> str:
     if value is None:
         return ""
@@ -496,6 +645,104 @@ def _fmt_money(value: float | None) -> str:
     if value is None:
         return "no verificado"
     return f"US$ {value:,.0f}"
+
+
+def _fmt_money_short(value: float) -> str:
+    abs_v = abs(value)
+    if abs_v >= 1e9:
+        return f"US$ {value / 1e9:.1f}B"
+    if abs_v >= 1e6:
+        return f"US$ {value / 1e6:.1f}M"
+    return f"US$ {value:,.0f}"
+
+
+_chart_id_counter = 0
+
+
+def _revenue_line_chart_svg(
+    series: list[dict], *, width: int = 560, height: int = 180
+) -> str:
+    """Gráfica de línea en SVG puro (sin librerías de terceros) para el
+    histórico de ingresos ya citado arriba — nunca un número nuevo, solo
+    otra forma de ver los mismos puntos. Si hay menos de 2 años con dato,
+    no se dibuja nada (no se inventa una tendencia con un solo punto)."""
+    global _chart_id_counter
+    points = [p for p in series if p.get("value") is not None]
+    if len(points) < 2:
+        return ""
+    _chart_id_counter += 1
+    gradient_id = f"chartFade{_chart_id_counter}"
+
+    values = [p["value"] for p in points]
+    min_v, max_v = min(values), max(values)
+    span = (max_v - min_v) or 1.0
+    pad_x, pad_top, pad_bottom = 28, 28, 24
+    n = len(points)
+
+    def px(i: int) -> float:
+        return pad_x + (width - 2 * pad_x) * (i / (n - 1))
+
+    def py(v: float) -> float:
+        return pad_top + (height - pad_top - pad_bottom) * (1 - (v - min_v) / span)
+
+    coords = [(px(i), py(p["value"])) for i, p in enumerate(points)]
+    polyline = " ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+    area = (
+        f"M{coords[0][0]:.1f},{height - pad_bottom:.1f} "
+        + " ".join(f"L{x:.1f},{y:.1f}" for x, y in coords)
+        + f" L{coords[-1][0]:.1f},{height - pad_bottom:.1f} Z"
+    )
+    dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" class="chart-dot" />' for x, y in coords)
+    value_labels = "".join(
+        f'<text x="{coords[i][0]:.1f}" y="{coords[i][1] - 10:.1f}" class="chart-value-label" '
+        f'text-anchor="middle">{_esc(_fmt_money_short(p["value"]))}</text>'
+        for i, p in enumerate(points)
+    )
+    year_labels = "".join(
+        f'<text x="{coords[i][0]:.1f}" y="{height - 6:.1f}" class="chart-year-label" '
+        f'text-anchor="middle">{_esc(str(p["period_end"])[:4])}</text>'
+        for i, p in enumerate(points)
+    )
+    return f"""
+      <svg viewBox="0 0 {width} {height}" class="line-chart" role="img" aria-label="Ingresos por año">
+        <defs>
+          <linearGradient id="{gradient_id}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" class="chart-fade-start" />
+            <stop offset="100%" class="chart-fade-end" />
+          </linearGradient>
+        </defs>
+        <path d="{area}" fill="url(#{gradient_id})" stroke="none" />
+        <polyline points="{polyline}" class="chart-line" fill="none" />
+        {dots}
+        {value_labels}
+        {year_labels}
+      </svg>"""
+
+
+def _stat_cards(verified: dict) -> str:
+    """3 tarjetas grandes con los números que más importan de un vistazo —
+    los mismos que ya están citados en el grid de abajo, solo con más
+    jerarquía visual (estilo tablero)."""
+    keys = (("revenue", "Ingresos"), ("ebitda", "EBITDA (derivado)"), ("net_income", "Utilidad neta"))
+    cards = []
+    for key, label in keys:
+        cv = verified.get(key)
+        if cv is None:
+            continue
+        icon = _CONCEPT_ICONS.get(key, "🔎")
+        cards.append(
+            f"""
+      <div class="stat-card reveal">
+        <span class="stat-icon" aria-hidden="true">{icon}</span>
+        <div>
+          <p class="stat-label">{_esc(label)}</p>
+          <p class="stat-value"{_count_attr(cv.value)}>{_esc(_fmt_money(cv.value))}</p>
+        </div>
+      </div>"""
+        )
+    if not cards:
+        return ""
+    return f'<div class="stat-row">{"".join(cards)}</div>'
 
 
 def _badge(cv: CitedValue) -> str:
@@ -579,27 +826,6 @@ def _pipeline_section() -> str:
       página:</p>
       <div class="pipeline-track">{''.join(steps)}
       </div>
-    </section>"""
-
-
-def _trust_section() -> str:
-    cards = "".join(
-        f"""
-      <div class="trust-card reveal">
-        <div class="trust-icon" aria-hidden="true">{icon}</div>
-        <h3>{_esc(title)}</h3>
-        <p>{_esc(body)}</p>
-      </div>"""
-        for icon, title, body in _TRUST_POINTS
-    )
-    return f"""
-    <section class="trust" aria-labelledby="trust-title">
-      <h2 id="trust-title">🤝 Por qué puedes confiar en esta página</h2>
-      <div class="trust-grid">{cards}
-      </div>
-      <p class="trust-link">
-        <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Ver las reglas y el código fuente completos ↗</a>
-      </p>
     </section>"""
 
 
@@ -689,6 +915,18 @@ def build_html_report(
     cards = "".join(
         _figure_card(i, key, label, verified[key]) for i, (key, label) in enumerate(_DISPLAY_ORDER)
     )
+    stat_cards = _stat_cards(verified)
+    revenue_series_points = [
+        {"period_end": cv.period_end, "value": cv.value}
+        for cv in (verified.get("revenue_series") or [])
+        if cv.value is not None
+    ]
+    revenue_chart = _revenue_line_chart_svg(revenue_series_points)
+    chart_card = (
+        f'<div class="card chart-card reveal"><h3>📈 Ingresos por año (mismo documento citado arriba)</h3>{revenue_chart}</div>'
+        if revenue_chart
+        else ""
+    )
     cambios_section = (
         f"""
     <section class="card reveal" aria-labelledby="cambios-title">
@@ -718,6 +956,8 @@ def build_html_report(
     <section aria-label="Cifras con fuente">
       <h2>📊 Cifras con fuente</h2>
       <p class="section-intro">Cada tarjeta dice si la cifra está citada, es derivada de otras, o no se pudo verificar.</p>
+      {stat_cards}
+      {chart_card}
       <div class="grid">{cards}
       </div>
     </section>
@@ -727,11 +967,13 @@ def build_html_report(
     </section>
     {cambios_section}
     {_try_it_section(companies)}
-    {_trust_section()}
   </main>
   <footer>
     <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
     <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
+    <p class="footer-link">
+      <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Código fuente ↗</a>
+    </p>
   </footer>
   <script>{_SCRIPT}</script>
 </body>
