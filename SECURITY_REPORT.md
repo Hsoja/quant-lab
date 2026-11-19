@@ -53,3 +53,23 @@ corrigió en la misma sesión (ver tabla).
 ## 5. Historial
 
 - 2026-11-18 — v1. Primera auditoría, antes de publicar el repo. Veredicto 🟢 Aprobado.
+- 2026-11-18 — v1.1. Auditoría del diseño v3 de la página (fondo animado, tipografías embebidas,
+  widgets de TradingView, asistente flotante). Veredicto 🟢 Aprobado, con lo siguiente.
+  - **Pruebas:** `pytest` en verde (91 pasan, 1 omitida de red), con pruebas nuevas para fuentes
+    `data:`, CSP, widgets, asistente y base de respuestas.
+  - **bandit:** 0 hallazgos altos; 1 medio (`B310`, `ingest/price.py:71`) que **ya existía** y no
+    se tocó en este cambio. **Pendiente** revisar que esa URL se valide como `https://`, igual que
+    se hizo en QL-1 para `ingest/edgar.py`.
+  - **Secretos:** búsqueda manual sin valores: ninguna llave real; solo una clave falsa en
+    `tests/test_llm_summarizer.py`. No hay `.env`, llaves, bases de datos ni binarios sin origen.
+    Los únicos binarios nuevos son 4 fuentes `.woff2` (OFL, origen en
+    `report/assets/fonts/LICENSES.md`). **No se corrió gitleaks** (no está instalado en este entorno).
+  - **Revisión del script de la página:** sin `innerHTML`, `eval`, `new Function`,
+    `document.write`, `fetch`, XHR, WebSocket ni almacenamiento. Las únicas URLs son el espacio de
+    nombres SVG y `https://www.tradingview-widget.com`. El asistente no usa red y pinta con
+    `textContent`.
+  - **CSP:** `frame-src` pasa a `https://www.tradingview-widget.com`, nuevo `font-src data:`, y se
+    quitó `frame-ancestors` (ignorado en `<meta>`). `script-src` sigue por hash SHA-256.
+  - **No verificado:** el comportamiento de los widgets dentro del iframe `sandbox` de la página
+    publicada (cada widget se abrió por separado en un navegador y cargó; la página completa se
+    probó en Chrome sin acceso a TradingView).

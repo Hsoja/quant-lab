@@ -52,10 +52,10 @@ text, only the JSON of already-verified figures (see `docs/SECURITY.md`).
 
 ## The web page
 
-`report/html_report.py` generates a single self-contained HTML file (dark, indigo/purple glow —
-updated after explicit design feedback from an earlier white/light-blue look) from
-the same data as the Markdown report. It's static on purpose: no backend, no forms, no
-`localStorage`, no external scripts or fonts. All dynamic text goes through `html.escape` before
+`report/html_report.py` generates a single self-contained HTML file (dark, animated violet/mint
+glow background, Manrope + Instrument Serif + IBM Plex Mono embedded as `data:` fonts — see
+`report/assets/`) from the same data as the Markdown report. It's static on purpose: no backend,
+no forms, no `localStorage`, no external scripts or font hosts. All dynamic text goes through `html.escape` before
 being inserted, and it ships a strict Content-Security-Policy (`default-src 'none'`; the inline
 `<script>` is allowed by a SHA-256 hash of its exact content, not `'unsafe-inline'`). Reveal
 content is visible by default and only pre-hides once the script confirms it started, so a future
@@ -73,12 +73,25 @@ prices) for a short list of tickers and writes `examples/companies.json`, which 
 as a `data-json` HTML attribute (never inside a `<script>` tag) and reads client-side. See
 SPEC.md section 9 for the full decisions and limitations.
 
-For each example company it also shows a live TradingView chart and news widget (plain
-`<iframe sandbox>`, same pattern as the TradePro project — never TradingView's own script, so
+The page also has a live TradingView price ticker, and for each example company an interactive
+chart, price ranges and a news feed (plain `<iframe sandbox>` to `tradingview-widget.com`, config
+passed in the URL hash, same pattern as the TradePro project — never TradingView's own script, so
 `script-src` stays untouched; only `frame-src` allows their domain) and a chat-style Q&A: 3
 questions per company with answers generated at build time from the same verified figures, never
 a live LLM call — no server holds an API key that a visitor could exhaust. Every answer follows
 the same rule as the rest of the project: thesis and risk, never "buy" or "sell".
+
+### Floating assistant ("Quant")
+
+A button in the bottom-right opens a side panel (animated dot orb, suggested questions, typewriter
+replies). It is **not a live chat**: there is no network, model or API key. Your question is matched
+by keywords against answers written at build time from the same verified figures (`_bot_kb`), and
+when nothing matches it says it has no prepared answer instead of inventing one.
+
+### Publishing the page
+
+The live page (`hsoja.github.io/quant-lab`) is served from the `gh-pages` branch (`index.html`).
+After regenerating `examples/reporte_ejemplo.html`, copy it there as `index.html`.
 
 ## Running tests
 

@@ -258,7 +258,8 @@ Regla 4 sigue aplicando: ninguna respuesta dice "compra" ni "vende".
 ### 9.7 Gráfica y noticias en vivo (TradingView, iframe)
 
 Mismo patrón que TradePro: widgets de TradingView como `<iframe>` con `sandbox` (nunca el script
-de TradingView, para no tocar `script-src`). La CSP agrega `frame-src https://s.tradingview.com`
+de TradingView, para no tocar `script-src`). La CSP agrega `frame-src https://www.tradingview-widget.com` (host corregido en v1.8: el patrón
+anterior, `s.tradingview.com` con `?symbol=`, no cargaba los widgets; ver sección 12)
 — el único cambio real a la superficie de seguridad de esta fase. El símbolo (ej. `NYSE:SPGI`) se
 valida con una expresión regular antes de armar la URL del iframe, y la bolsa de cada empresa de
 ejemplo se documenta a mano en `scripts/precompute_examples.py` (`_EXCHANGE_BY_TICKER`) — no se
@@ -316,3 +317,39 @@ El enlace al código fuente se movió al pie de página, sin la sección alreded
   salen de cierres diarios históricos (`calc/montecarlo.py`, `scripts/precompute_examples.py`,
   fuente no oficial); si no hay historial, la página pide supuestos manuales marcados "no
   verificado". Las probabilidades no están validadas con backtest y la página lo dice.
+- 2026-11-18 — v1.8. Sección 12: diseño v3 (fondo animado, tipografías propias, widgets de
+  TradingView que sí cargan y asistente flotante). Mismo contenido y mismas reglas; ver abajo.
+
+## 12. Diseño v3 (2026-11-18)
+
+Pedido explícito: más dinámica, más diseño de fondo (referencias: tablero oscuro con tarjetas
+degradadas), conectada a TradingView, un bot como el de Operativa y tipografías con carácter
+(referencias: TradePro y Operativa.ia). Solo cambia la presentación; las reglas 1-5 y la
+separación Capa A / Capa B no se tocan.
+
+- **Diseño.** `report/assets/style.css`. Fondo con cuadrícula, tres orbes que derivan, una
+  constelación de partículas en `<canvas>` (decorativa, se detiene con la pestaña oculta) y brillo
+  que sigue al puntero en las tarjetas. Tarjetas KPI con tinte degradado y franja de estado,
+  borde de frontera animado, gráfica de ingresos que se dibuja al entrar, reloj UTC y menú que
+  marca la sección activa. Todo respeta `prefers-reduced-motion`.
+- **Tipografías.** Manrope (texto), Instrument Serif cursiva (acentos) e IBM Plex Mono (cifras),
+  todas OFL, en `report/assets/fonts/` y **embebidas como `data:` URI** al generar la página
+  (`font-src data:`): sigue siendo un solo archivo y no se carga nada de un host de fuentes.
+- **TradingView.** Los widgets viejos no cargaban: usaban `s.tradingview.com` con `?symbol=`. Ahora
+  se usa el mismo patrón verificado de TradePro: iframe con `sandbox` a
+  `https://www.tradingview-widget.com/embed-widget/<widget>/?locale=...#<config JSON>`; la
+  configuración viaja en el hash, que el navegador no envía al servidor. Cinta de precios global,
+  gráfica interactiva y rangos de precio por empresa, y noticias. El feed de noticias solo responde
+  con `locale=en`; con `es` TradingView muestra un error. Siguen marcados "externo · no verificado".
+- **Asistente "Quant".** Botón flotante y panel lateral (estilo Operativa) con orbe de puntos,
+  escritura progresiva y preguntas sugeridas. **No es un chat en vivo**: no hay red, modelo ni
+  llave. Empareja la pregunta con respuestas redactadas al generar la página (`_bot_kb` en
+  `report/html_report.py`, a partir de las mismas cifras verificadas, más las respuestas por
+  empresa de la sección 9.6). Sin respuesta preparada, dice que no la tiene (`no verificado`).
+- **Resumen de verificación en el encabezado** (citadas / derivadas / sin verificar): se cuenta
+  en código a partir de las cifras reales, nunca un porcentaje inventado.
+- **CSP.** Cambios: `frame-src` pasa a `https://www.tradingview-widget.com`, se agrega
+  `font-src data:` y se quitó `frame-ancestors`, que los navegadores ignoran dentro de un
+  `<meta>` (GitHub Pages no permite cabeceras propias, así que esa protección no es posible aquí).
+- **Publicación.** La página en vivo se sirve desde la rama `gh-pages` (`index.html`). Hay que
+  copiarle `examples/reporte_ejemplo.html` después de regenerarlo.

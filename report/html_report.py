@@ -1,8 +1,10 @@
 """Página web del reporte (adicional, fuera del alcance original del MVP,
 ver SPEC.md sección 3). Es un único archivo HTML autocontenido y estático:
 no hay backend, no hay formularios, no se guarda nada en el navegador.
-Diseño v2 (Capa A hechos verificados · Capa B simulación · Diario), oscuro (a pedido explícito de
-un look de tablero más vistoso), animada, y pensada para explicar el sistema de
+Diseño v3 (Capa A hechos verificados · Capa B simulación · Diario), oscuro con fondo animado
+(brillos violeta/menta, a pedido explícito de un look de tablero más vistoso), con tipografías
+embebidas (Manrope, Instrument Serif, IBM Plex Mono), widgets de TradingView en iframes
+aislados, un asistente flotante de respuestas preparadas, animada, y pensada para explicar el sistema de
 verificación (no solo mostrar números) — así alguien que nunca vio el
 proyecto entiende, en un scroll, por qué puede confiar en lo que lee.
 
@@ -33,12 +35,35 @@ import hashlib
 import html as _html
 import json as _json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from calc.fcf import CagrResult, FcfResult
 from extract.facts import CitedValue
 from report.report import DISCLAIMER, _DISPLAY_ORDER
 
 _REPO_URL = "https://github.com/Hsoja/quant-lab"
+
+_ASSETS = Path(__file__).resolve().parent / "assets"
+
+# Tipografías embebidas como data: URI (licencia OFL, ver assets/fonts/LICENSES.md):
+# la página sigue siendo un solo archivo y no carga nada de ningún host de fuentes.
+_FONT_FACES = (
+    ("Manrope", "normal", "200 800", "manrope-var.woff2"),
+    ("Instrument Serif", "normal", "400", "instrument-serif.woff2"),
+    ("Instrument Serif", "italic", "400", "instrument-serif-italic.woff2"),
+    ("IBM Plex Mono", "normal", "500", "ibm-plex-mono-500.woff2"),
+)
+
+
+def _font_css() -> str:
+    rules = []
+    for family, style, weight, filename in _FONT_FACES:
+        data = base64.b64encode((_ASSETS / "fonts" / filename).read_bytes()).decode("ascii")
+        rules.append(
+            f'@font-face {{ font-family: "{family}"; font-style: {style}; font-weight: {weight}; '
+            f"font-display: swap; src: url(data:font/woff2;base64,{data}) format(\"woff2\"); }}"
+        )
+    return "\n".join(rules)
 
 # El único <script> de la página, como texto plano (sin f-string: así sus
 # propias llaves de JS no necesitan escaparse por duplicado). Como la página
@@ -54,6 +79,22 @@ _SCRIPT = """(function () {
   // por el valor por defecto del CSS.
   document.documentElement.classList.add("js-ready");
   var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // --- TradingView: iframes aislados con sandbox. La configuración viaja en
+  // el hash (#...), que el navegador NUNCA envía al servidor; el patrón es el
+  // mismo que usa TradePro. Nunca se carga un <script> de TradingView.
+  var TV_BASE = "https://www.tradingview-widget.com/embed-widget/";
+  function tvFrame(widget, config, title, extraClass, locale) {
+    var frame = document.createElement("iframe");
+    frame.className = "live-frame" + (extraClass ? " " + extraClass : "");
+    frame.src = TV_BASE + widget + "/?locale=" + (locale || "es") + "#" + encodeURIComponent(JSON.stringify(config));
+    frame.loading = "lazy";
+    frame.title = title;
+    frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox");
+    frame.referrerPolicy = "strict-origin-when-cross-origin";
+    return frame;
+  }
+
 
   var progress = document.getElementById("scroll-progress");
   function updateProgress() {
@@ -161,52 +202,78 @@ _SCRIPT = """(function () {
       return "warn"; // "no verificado"
     }
 
-    // Gráfica y noticias en vivo: iframes aislados de TradingView (mismo
-    // patrón que TradePro). La página nunca llama a nada; el navegador de
-    // quien visita sí, directo a TradingView, dentro de un marco con
-    // sandbox. El símbolo se valida antes de armar la URL, aunque hoy
+    // Gráfica y noticias en vivo: iframes aislados de TradingView (ver tvFrame).
+    // El símbolo se valida antes de armar la configuración, aunque hoy
     // siempre venga de nuestros propios datos.
     var SYMBOL_PATTERN = /^[A-Z]+:[A-Z.]{1,10}$/;
 
-    function liveWidgetFrame(symbol, widgetPath, title, extraClass) {
-      var frame = document.createElement("iframe");
-      frame.className = "live-frame" + (extraClass ? " " + extraClass : "");
-      frame.src =
-        "https://s.tradingview.com/embed-widget/" + widgetPath + "/?symbol=" +
-        encodeURIComponent(symbol) + "&locale=es&colorTheme=dark";
-      frame.loading = "lazy";
-      frame.title = title;
-      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups");
-      frame.referrerPolicy = "strict-origin-when-cross-origin";
-      return frame;
+    function liveCard(titleText, frame, extraClass) {
+      var card = document.createElement("div");
+      card.className = "card live-card" + (extraClass ? " " + extraClass : "");
+      var h = document.createElement("h4");
+      h.textContent = titleText;
+      card.appendChild(h);
+      card.appendChild(frame);
+      return card;
     }
 
     function liveSection(ticker, symbol) {
+      var block = document.createElement("div");
+      block.className = "live-block";
+
+      var head = document.createElement("div");
+      head.className = "live-block-head";
+      var title = document.createElement("h3");
+      title.textContent = "Mercado en vivo · " + symbol;
+      head.appendChild(title);
+      var ext = document.createElement("span");
+      ext.className = "live-ext";
+      ext.textContent = "externo · no verificado";
+      head.appendChild(ext);
+      block.appendChild(head);
+
       var wrap = document.createElement("div");
       wrap.className = "try-it-live";
 
-      var chartCard = document.createElement("div");
-      chartCard.className = "card live-card";
-      var chartTitle = document.createElement("h4");
-      chartTitle.textContent = "📈 Gráfica en vivo";
-      chartCard.appendChild(chartTitle);
-      chartCard.appendChild(liveWidgetFrame(symbol, "symbol-overview", "Gráfica en vivo de " + ticker, "live-frame-chart"));
-      wrap.appendChild(chartCard);
-
-      var newsCard = document.createElement("div");
-      newsCard.className = "card live-card";
-      var newsTitle = document.createElement("h4");
-      newsTitle.textContent = "📰 Noticias en vivo";
-      newsCard.appendChild(newsTitle);
-      newsCard.appendChild(liveWidgetFrame(symbol, "timeline", "Noticias en vivo de " + ticker, "live-frame-news"));
-      wrap.appendChild(newsCard);
+      wrap.appendChild(liveCard(
+        "Gráfica interactiva",
+        tvFrame("advanced-chart", {
+          autosize: true, symbol: symbol, interval: "D", timezone: "America/Toronto",
+          theme: "dark", style: "1", locale: "es", allow_symbol_change: false,
+          hide_side_toolbar: true, withdateranges: true, save_image: false,
+          backgroundColor: "rgba(13, 15, 30, 0)", gridColor: "rgba(148, 160, 255, 0.06)",
+          support_host: "https://www.tradingview-widget.com"
+        }, "Gráfica interactiva de " + ticker, "live-frame-main"),
+        "live-wide"
+      ));
+      wrap.appendChild(liveCard(
+        "Rangos de precio",
+        tvFrame("symbol-overview", {
+          symbols: [[ticker, symbol + "|1D"]], chartOnly: false, width: "100%", height: "100%",
+          locale: "es", colorTheme: "dark", autosize: true, showVolume: false, showMA: false,
+          hideDateRanges: false, hideMarketStatus: false, hideSymbolLogo: false,
+          scalePosition: "right", scaleMode: "Normal", fontSize: "10", noTimeScale: false,
+          valuesTracking: "1", changeMode: "price-and-percent", chartType: "area",
+          lineWidth: 2, lineType: 0, isTransparent: true,
+          backgroundColor: "rgba(13, 15, 30, 0)",
+          topColor: "rgba(123, 108, 255, 0.35)", bottomColor: "rgba(123, 108, 255, 0)", lineColor: "#9a8fff"
+        }, "Rangos de precio de " + ticker, "live-frame-chart")
+      ));
+      wrap.appendChild(liveCard(
+        "Noticias de mercado (en inglés)",
+        // El feed de noticias de TradingView solo responde con locale=en (con es muestra un error).
+        tvFrame("timeline", {
+          width: "100%", height: "100%", colorTheme: "dark", isTransparent: true,
+          feedMode: "symbol", symbol: symbol, displayMode: "regular"
+        }, "Noticias en vivo de " + ticker, "live-frame-news", "en")
+      ));
 
       var note = document.createElement("p");
       note.className = "live-note";
-      note.textContent = "Widget externo de TradingView, no verificado por este proyecto — úsalo solo como referencia visual.";
+      note.textContent = "Widgets externos de TradingView, no verificados por este proyecto — úsalos solo como referencia visual; los precios pueden ir con retraso.";
       wrap.appendChild(note);
-
-      return wrap;
+      block.appendChild(wrap);
+      return block;
     }
 
     // Chat de preguntas ya preparadas (nunca un chat en vivo: SPEC.md 9.6).
@@ -331,6 +398,7 @@ _SCRIPT = """(function () {
           if (company.qa && company.qa.length) {
             resultEl.appendChild(chatSection(ticker, company.qa));
           }
+          document.dispatchEvent(new CustomEvent("company-chosen", { detail: { ticker: ticker, qa: company.qa || [] } }));
         },
         prefersReduced ? 0 : 650
       );
@@ -743,6 +811,302 @@ _SCRIPT = """(function () {
     });
   })();
 
+  // --- Reloj UTC, spotlight, navegación activa y cinta de TradingView --------
+  (function () {
+    var clockEl = document.getElementById("clock");
+    if (clockEl) {
+      var tick = function () { clockEl.textContent = new Date().toISOString().slice(11, 19) + " UTC"; };
+      tick();
+      window.setInterval(tick, 1000);
+    }
+    document.querySelectorAll(".spot").forEach(function (node) {
+      node.addEventListener("pointermove", function (ev) {
+        var r = node.getBoundingClientRect();
+        node.style.setProperty("--mx", (ev.clientX - r.left) + "px");
+        node.style.setProperty("--my", (ev.clientY - r.top) + "px");
+      });
+    });
+    var links = document.querySelectorAll('.nav a[href^="#"]');
+    if ("IntersectionObserver" in window && links.length) {
+      var byId = {};
+      links.forEach(function (a) { byId[a.getAttribute("href").slice(1)] = a; });
+      var spy = new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting && byId[en.target.id]) {
+            links.forEach(function (a) { a.classList.remove("is-active"); });
+            byId[en.target.id].classList.add("is-active");
+          }
+        });
+      }, { rootMargin: "-35% 0px -55% 0px" });
+      Object.keys(byId).forEach(function (id) {
+        var s = document.getElementById(id);
+        if (s) spy.observe(s);
+      });
+    }
+    var tape = document.getElementById("ticker");
+    if (tape) {
+      var symbols = [
+        ["FOREXCOM:SPXUSD", "S&P 500"], ["FOREXCOM:NSXUSD", "Nasdaq 100"], ["FOREXCOM:DJI", "Dow"],
+        ["NYSE:SPGI", "SPGI"], ["NASDAQ:COST", "COST"], ["NASDAQ:AAPL", "AAPL"], ["NYSE:UBER", "UBER"],
+        ["BITSTAMP:BTCUSD", "Bitcoin"], ["OANDA:XAUUSD", "Oro"], ["FX:USDCAD", "USD/CAD"]
+      ].map(function (p) { return { proName: p[0], title: p[1] }; });
+      tape.appendChild(tvFrame("ticker-tape", {
+        width: "100%", height: "100%", colorTheme: "dark", isTransparent: true,
+        symbols: symbols, showSymbolLogo: true, displayMode: "adaptive"
+      }, "Cinta de precios de TradingView", ""));
+    }
+  })();
+
+  // Constelación de fondo (solo decorativa): partículas lentas unidas por
+  // líneas finas. Se detiene con la pestaña oculta y no corre con
+  // prefers-reduced-motion.
+  (function () {
+    var cv = document.getElementById("bg-canvas");
+    if (!cv || prefersReduced || !cv.getContext) return;
+    var ctx = cv.getContext("2d");
+    var W = 0, H = 0, dots = [];
+    function resize() {
+      W = cv.width = window.innerWidth;
+      H = cv.height = window.innerHeight;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+    for (var i = 0; i < 46; i++) {
+      dots.push({ x: Math.random() * W, y: Math.random() * H, vx: (Math.random() - 0.5) * 0.28, vy: (Math.random() - 0.5) * 0.28 });
+    }
+    function frame() {
+      if (!document.hidden) {
+        ctx.clearRect(0, 0, W, H);
+        for (var a = 0; a < dots.length; a++) {
+          var p = dots[a];
+          p.x += p.vx; p.y += p.vy;
+          if (p.x < 0 || p.x > W) p.vx *= -1;
+          if (p.y < 0 || p.y > H) p.vy *= -1;
+          ctx.fillStyle = "rgba(154, 143, 255, 0.7)";
+          ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, 6.2832); ctx.fill();
+          for (var b = a + 1; b < dots.length; b++) {
+            var q = dots[b];
+            var dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
+            if (d2 < 19600) {
+              ctx.strokeStyle = "rgba(123, 108, 255, " + (0.22 * (1 - d2 / 19600)).toFixed(3) + ")";
+              ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
+            }
+          }
+        }
+      }
+      window.requestAnimationFrame(frame);
+    }
+    window.requestAnimationFrame(frame);
+  })();
+
+  // --- Asistente flotante "Quant" (estilo Operativa) ------------------------
+  // NO es un chat en vivo: no hay red, ni modelo, ni llave. Empareja tu
+  // pregunta con respuestas redactadas al generar la página, a partir de las
+  // mismas cifras verificadas. Si no hay respuesta preparada, dice que no la
+  // tiene — nunca inventa. Todo con createElement/textContent.
+  (function () {
+    var fab = document.getElementById("bot-open");
+    var drawer = document.getElementById("bot-drawer");
+    var scrim = document.getElementById("bot-scrim");
+    var closeBtn = document.getElementById("bot-close");
+    var resetBtn = document.getElementById("bot-reset");
+    var log = document.getElementById("bot-log");
+    var chipsEl = document.getElementById("bot-chips");
+    var input = document.getElementById("bot-input");
+    var sendBtn = document.getElementById("bot-send");
+    var dataEl = document.getElementById("bot-data");
+    var orb = document.getElementById("bot-orb");
+    var scroller = document.getElementById("bot-scroll");
+    if (!fab || !drawer || !log || !input || !dataEl || !chipsEl) return;
+
+    var kb = [];
+    try { kb = JSON.parse(dataEl.getAttribute("data-kb") || "[]"); } catch (e) { kb = []; }
+    var companyQa = [];
+    var companyTicker = "";
+
+    function norm(s) {
+      return String(s).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ");
+    }
+    var STOP = " que una uno unos unas los las con por para del tan como cual cuales esta este esto estos son fue fueron hay ese esa mas muy pero les sus mis tus nos ser sobre donde cuando quien ";
+    function tokens(s) {
+      return norm(s).split(" ").filter(function (w) { return w.length > 2 && STOP.indexOf(" " + w + " ") === -1; });
+    }
+
+    var COMPANY_EXTRA = [
+      ["ingresos", "crecimiento", "cagr", "ventas"],
+      ["cara", "barata", "caro", "barato", "valoracion", "precio", "fcf", "yield", "multiplo"],
+      ["riesgo", "riesgos", "invalidaria", "invalidar"]
+    ];
+
+    function best(question) {
+      var q = tokens(question);
+      var pool = [];
+      companyQa.forEach(function (it) { pool.push({ item: it, bonus: 1 }); });
+      kb.forEach(function (it) { pool.push({ item: it, bonus: 0 }); });
+      var top = null, topScore = 0;
+      pool.forEach(function (entry) {
+        var kw = (entry.item.keywords || []).map(norm);
+        var score = 0;
+        q.forEach(function (w) {
+          if (kw.indexOf(w) !== -1) { score += 2; return; }
+          if (w.length > 4) {
+            for (var i = 0; i < kw.length; i++) {
+              if (kw[i].length > 4 && (kw[i].indexOf(w.slice(0, 5)) === 0)) { score += 1; break; }
+            }
+          }
+        });
+        if (score > 0) score += entry.bonus;
+        if (score > topScore) { topScore = score; top = entry.item; }
+      });
+      return topScore >= 2 ? top : null;
+    }
+
+    function bubble(text, who) {
+      var b = document.createElement("div");
+      b.className = "chat-bubble chat-bubble-" + who;
+      b.textContent = text;
+      log.appendChild(b);
+      toBottom();
+      return b;
+    }
+    function toBottom() {
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    }
+    function typing() {
+      var b = document.createElement("div");
+      b.className = "chat-bubble chat-bubble-bot";
+      var d = document.createElement("span");
+      d.className = "dots";
+      for (var i = 0; i < 3; i++) d.appendChild(document.createElement("span"));
+      b.appendChild(d);
+      log.appendChild(b);
+      toBottom();
+      return b;
+    }
+    function typeInto(el, text) {
+      if (prefersReduced) { el.textContent = text; toBottom(); return; }
+      var i = 0;
+      el.textContent = "";
+      var iv = window.setInterval(function () {
+        i += 3;
+        el.textContent = text.slice(0, i);
+        toBottom();
+        if (i >= text.length) window.clearInterval(iv);
+      }, 16);
+    }
+
+    function renderChips() {
+      while (chipsEl.firstChild) chipsEl.removeChild(chipsEl.firstChild);
+      var list = [];
+      companyQa.forEach(function (it) { list.push(it); });
+      kb.forEach(function (it) { if (list.length < 7) list.push(it); });
+      list.slice(0, 7).forEach(function (it) {
+        var c = document.createElement("button");
+        c.type = "button";
+        c.className = "chip";
+        c.textContent = it.pregunta;
+        c.addEventListener("click", function () { ask(it.pregunta, it); });
+        chipsEl.appendChild(c);
+      });
+    }
+
+    var FALLBACK = "No tengo una respuesta preparada para eso, y prefiero decir \\"no verificado\\" antes que inventar. Prueba con una de las preguntas de abajo.";
+
+    function ask(text, direct) {
+      var q = String(text).trim().slice(0, 200);
+      if (!q) return;
+      bubble(q, "user");
+      var wait = typing();
+      var item = direct || best(q);
+      var answer = item ? item.respuesta : FALLBACK;
+      window.setTimeout(function () {
+        wait.textContent = "";
+        typeInto(wait, answer);
+      }, prefersReduced ? 0 : 700);
+    }
+
+    function greet() {
+      while (log.firstChild) log.removeChild(log.firstChild);
+      bubble("Hola, soy Quant. Respondo con textos ya preparados a partir de las cifras verificadas de esta página: no es un chat en vivo, no inventa números y nunca dice \\"compra\\" ni \\"vende\\".", "bot");
+      renderChips();
+    }
+    greet();
+
+    document.addEventListener("company-chosen", function (ev) {
+      var d = ev.detail || {};
+      companyTicker = String(d.ticker || "");
+      companyQa = (d.qa || []).map(function (qa, i) {
+        return {
+          pregunta: qa.pregunta + " (" + companyTicker + ")",
+          respuesta: qa.respuesta,
+          keywords: tokens(qa.pregunta).concat(COMPANY_EXTRA[i] || [], [companyTicker.toLowerCase()])
+        };
+      });
+      renderChips();
+    });
+
+    // Orbe de puntos (decorativo)
+    var ctx = orb && orb.getContext ? orb.getContext("2d") : null;
+    var pts = [];
+    for (var i = 0; i < 380; i++) {
+      var y = 1 - (i / 379) * 2;
+      var r = Math.sqrt(1 - y * y);
+      var th = Math.PI * (3 - Math.sqrt(5)) * i;
+      pts.push([Math.cos(th) * r, y, Math.sin(th) * r]);
+    }
+    var angle = 0, raf = 0, open = false;
+    function drawOrb() {
+      if (!ctx) return;
+      var w = orb.width, h = orb.height;
+      ctx.clearRect(0, 0, w, h);
+      var ca = Math.cos(angle), sa = Math.sin(angle);
+      var R = w * 0.34;
+      pts.forEach(function (p) {
+        var x = p[0] * ca - p[2] * sa;
+        var z = p[0] * sa + p[2] * ca;
+        var f = 1.7 / (2.3 - z);
+        var depth = (z + 1) / 2;
+        ctx.fillStyle = "hsla(" + Math.round(255 - (p[1] + 1) * 52) + ", 90%, 72%, " + (0.2 + 0.8 * depth).toFixed(2) + ")";
+        ctx.beginPath();
+        ctx.arc(w / 2 + x * R * f, h / 2 + p[1] * R * f, 1 + 1.9 * depth, 0, 6.2832);
+        ctx.fill();
+      });
+      angle += 0.007;
+      if (open && !prefersReduced) raf = window.requestAnimationFrame(drawOrb);
+    }
+
+    function setOpen(state) {
+      open = state;
+      drawer.classList.toggle("is-open", state);
+      scrim.classList.toggle("is-open", state);
+      drawer.setAttribute("aria-hidden", state ? "false" : "true");
+      fab.setAttribute("aria-expanded", state ? "true" : "false");
+      if (state) {
+        drawOrb();
+        window.setTimeout(function () { input.focus(); }, 300);
+      } else {
+        window.cancelAnimationFrame(raf);
+        fab.focus();
+      }
+    }
+    fab.addEventListener("click", function () { setOpen(!open); });
+    closeBtn.addEventListener("click", function () { setOpen(false); });
+    scrim.addEventListener("click", function () { setOpen(false); });
+    document.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && open) setOpen(false); });
+    resetBtn.addEventListener("click", greet);
+    function submit() {
+      var v = input.value;
+      input.value = "";
+      ask(v, null);
+    }
+    sendBtn.addEventListener("click", submit);
+    input.addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); submit(); } });
+    document.querySelectorAll("[data-open-bot]").forEach(function (b) {
+      b.addEventListener("click", function () { setOpen(true); });
+    });
+  })();
+
   var items = document.querySelectorAll(".reveal");
   if (prefersReduced || !("IntersectionObserver" in window)) {
     items.forEach(function (el) { el.classList.add("is-visible"); });
@@ -769,192 +1133,20 @@ def _sha256_b64(text: str) -> str:
 
 _SCRIPT_HASH = _sha256_b64(_SCRIPT)
 
-_TRADINGVIEW_ORIGIN = "https://s.tradingview.com"
+_TRADINGVIEW_ORIGIN = "https://www.tradingview-widget.com"
 
 _CSP = (
     "default-src 'none'; "
     "style-src 'self' 'unsafe-inline'; "
     f"script-src 'self' 'sha256-{_SCRIPT_HASH}'; "
     "img-src 'self'; "
+    "font-src data:; "
     f"frame-src {_TRADINGVIEW_ORIGIN}; "
     "base-uri 'none'; "
-    "form-action 'none'; "
-    "frame-ancestors 'none'"
+    "form-action 'none'"
 )
 
-_STYLE = """
-  :root {
-    --bg: #0A0D11;
-    --s1: #10151B;
-    --s2: #161C24;
-    --line: #232B35;
-    --mint: #6BE3BE;
-    --vio: #BBA8FF;
-    --amb: #F6BC52;
-    --cor: #FF8F80;
-    --paper: #E9EEF3;
-    --ink: #12161C;
-    --text: #E6EBF1;
-    --muted: #8D98A6;
-    --radius: 14px;
-    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text); line-height: 1.55;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-  a { color: var(--mint); }
-  h1, h2, h3, h4 { line-height: 1.2; margin: 0; }
-  #scroll-progress {
-    position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 50;
-    background: linear-gradient(90deg, var(--mint), var(--vio)); transition: width .1s linear;
-  }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-  .site-header { border-bottom: 1px solid var(--line); background: rgba(10,13,17,.92); position: sticky; top: 0; z-index: 40; }
-  .site-header .wrap { display: flex; align-items: center; gap: 18px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
-  .brand { font-weight: 700; letter-spacing: .02em; }
-  .brand span { color: var(--mint); }
-  .nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 999px; font-size: .9rem; }
-  .nav a:hover, .nav a:focus-visible { color: var(--text); background: var(--s2); }
-  .pill { font-size: .78rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--s1); }
-  .strip { background: var(--s1); border-bottom: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
-  .strip .wrap { padding-top: 8px; padding-bottom: 8px; }
-  .hero { padding: 44px 20px 20px; }
-  .hero h1 { font-size: clamp(1.9rem, 4.5vw, 2.9rem); letter-spacing: -.02em; max-width: 18ch; }
-  .hero p { color: var(--muted); max-width: 62ch; margin: 12px 0 0; }
-  .hero .chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-  .layer { margin: 28px 0; }
-  .layer-tag { display: inline-block; font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; padding: 4px 10px; border-radius: 6px; margin-bottom: 12px; }
-  .layer-a .layer-tag { color: var(--mint); background: rgba(107,227,190,.12); border: 1px solid rgba(107,227,190,.35); }
-  .layer-b .layer-tag { color: var(--vio); background: rgba(187,168,255,.12); border: 1px dashed rgba(187,168,255,.5); }
-  .layer h2 { font-size: 1.4rem; margin: 22px 0 8px; }
-  .section-intro { color: var(--muted); margin: 0 0 14px; max-width: 70ch; }
-  .risk { border: 1px solid rgba(246,188,82,.5); background: rgba(246,188,82,.08); border-radius: var(--radius); padding: 18px 20px; }
-  .risk h2 { margin-top: 0; color: var(--amb); font-size: 1.15rem; }
-  .risk ul { margin: 6px 0 10px; padding-left: 20px; }
-  .risk-note { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
-  .stat-row, .calc-grid, .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-  .stat-row { margin-bottom: 14px; }
-  .stat-card, .card { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-  .stat-card { display: flex; gap: 12px; align-items: center; }
-  .stat-icon, .card-icon { font-size: 1.3rem; }
-  .stat-label { margin: 0; color: var(--muted); font-size: .85rem; }
-  .stat-value, .card-value { margin: 2px 0 0; font-family: var(--mono); font-size: 1.35rem; font-weight: 600; }
-  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .card-head h3 { font-size: 1rem; flex: 1; }
-  .card-note { color: var(--muted); font-size: .88rem; margin: 8px 0 0; }
-  .card-detail { margin-top: 10px; font-size: .88rem; color: var(--muted); }
-  .card-detail summary { cursor: pointer; color: var(--mint); }
-  blockquote { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--mint); background: var(--s2); color: var(--text); font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
-  .badge { font-size: .72rem; padding: 3px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
-  .badge-ok { color: var(--mint); border-color: rgba(107,227,190,.5); background: rgba(107,227,190,.1); }
-  .badge-info { color: var(--vio); border-color: rgba(187,168,255,.5); background: rgba(187,168,255,.1); }
-  .badge-warn { color: var(--amb); border-color: rgba(246,188,82,.5); background: rgba(246,188,82,.1); }
-  .chart-card { margin-bottom: 14px; }
-  .chart-card h3 { font-size: 1rem; margin-bottom: 8px; }
-  .line-chart { width: 100%; height: auto; }
-  .chart-line { stroke: var(--mint); stroke-width: 2.5; }
-  .chart-dot { fill: var(--mint); }
-  .chart-fade-start { stop-color: var(--mint); stop-opacity: .3; }
-  .chart-fade-end { stop-color: var(--mint); stop-opacity: 0; }
-  .chart-value-label, .chart-year-label { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .frontier { margin: 40px 0 10px; padding: 18px 0; border-top: 2px dashed var(--line); border-bottom: 2px dashed var(--line); text-align: center; color: var(--muted); font-family: var(--mono); font-size: .85rem; letter-spacing: .04em; }
-  .frontier strong { color: var(--text); }
-  .notice-b { border: 1px dashed rgba(187,168,255,.55); background: rgba(187,168,255,.07); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
-  .notice-b p { margin: 0; }
-  .mc-controls { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-  .field label, .try-it-label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
-  .field.wide { grid-column: 1 / -1; }
-  input, select, textarea, button { font: inherit; }
-  input[type="number"], select, textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
-  .btn { background: var(--mint); color: #062016; border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; }
-  .btn:disabled { opacity: .6; cursor: progress; }
-  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid #9AA6B4; }
-  .mc-meta { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
-  .mc-error { color: var(--cor); min-height: 1.2em; margin: 8px 0 0; font-size: .9rem; }
-  .mc-stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px; }
-  .mc-stats-3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .mc-stat { background: var(--s1); border: 1px dashed rgba(187,168,255,.45); border-radius: var(--radius); padding: 14px 16px; }
-  .mc-stat.mc-risk { border-color: rgba(255,143,128,.6); background: rgba(255,143,128,.06); }
-  .mc-stat-label { margin: 0; color: var(--muted); font-size: .82rem; }
-  .mc-stat-value { margin: 4px 0 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 700; }
-  .mc-risk .mc-stat-value { color: var(--cor); }
-  .mc-stat-note { margin: 2px 0 0; color: var(--muted); font-size: .78rem; }
-  .mc-figure { margin: 16px 0 0; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
-  .mc-figure figcaption { color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
-  .mc-chart { width: 100%; height: auto; }
-  .mc-band-outer { fill: rgba(187,168,255,.14); }
-  .mc-band-inner { fill: rgba(187,168,255,.22); }
-  .mc-path { fill: none; stroke: rgba(187,168,255,.35); stroke-width: 1; }
-  .mc-median { fill: none; stroke: var(--vio); stroke-width: 2.5; }
-  .mc-capital-line { stroke: var(--amb); stroke-width: 1.5; stroke-dasharray: 5 4; }
-  .mc-axis { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .mc-bar-gain { fill: rgba(187,168,255,.7); }
-  .mc-bar-loss { fill: rgba(255,143,128,.75); }
-  .limits { color: var(--muted); font-size: .88rem; margin-top: 16px; }
-  .limits ul { padding-left: 20px; margin: 6px 0 0; }
-  .diary { background: var(--paper); color: var(--ink); border-radius: var(--radius); padding: 22px; margin-top: 8px; }
-  .diary h2 { margin-top: 0; }
-  .diary .section-intro, .diary label, .diary .hint { color: #4A5563; }
-  .diary .grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .diary select, .diary textarea { background: #fff; color: var(--ink); border-color: #B7C1CC; }
-  .diary fieldset { border: 1px solid #B7C1CC; border-radius: 8px; padding: 8px 12px; margin: 14px 0; }
-  .diary legend { font-size: .8rem; color: #4A5563; padding: 0 6px; }
-  .diary fieldset label { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; font-size: .95rem; color: var(--ink); }
-  .diary textarea { min-height: 110px; resize: vertical; }
-  .diary .preview { font-family: var(--mono); font-size: .8rem; min-height: 170px; }
-  .diary .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .diary .hint { font-size: .82rem; margin: 6px 0 0; }
-  .pipeline-track { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
-  .step { flex: 1 1 170px; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-  .step h3 { font-size: .98rem; margin: 6px 0; }
-  .step p { margin: 0; color: var(--muted); font-size: .86rem; }
-  .step-icon { font-size: 1.4rem; }
-  .step-arrow { align-self: center; color: var(--muted); }
-  .try-it { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 18px; }
-  .try-it-warning { background: rgba(246,188,82,.08); border: 1px solid rgba(246,188,82,.4); border-radius: 10px; padding: 10px 14px; font-size: .88rem; margin: 0 0 14px; }
-  .try-it-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
-  .try-it h2 { margin: 0; font-size: 1.2rem; }
-  .bot-avatar { font-size: 1.6rem; }
-  .bot-avatar-sm { font-size: 1.1rem; margin-right: 6px; }
-  .try-it-select { max-width: 340px; }
-  .try-it-result { margin-top: 14px; }
-  .try-it-result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .try-it-price { font-family: var(--mono); font-size: .9rem; }
-  .try-it-figures { display: grid; gap: 6px; margin-top: 10px; }
-  .try-it-figure { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding: 6px 0; }
-  .try-it-figure-label { flex: 1; color: var(--muted); }
-  .try-it-figure-value { font-family: var(--mono); }
-  .try-it-live { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 14px; }
-  .live-card h4 { margin-bottom: 8px; }
-  .live-frame { width: 100%; border: 0; border-radius: 8px; background: var(--bg); }
-  .live-frame-chart { height: 280px; }
-  .live-frame-news { height: 320px; }
-  .live-note { grid-column: 1 / -1; color: var(--muted); font-size: .82rem; margin: 0; }
-  .chat-card { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); }
-  .chat-head { display: flex; align-items: center; }
-  .chat-warn { color: var(--muted); font-size: .82rem; margin: 6px 0 10px; }
-  .chat-log { display: grid; gap: 8px; margin-bottom: 10px; }
-  .chat-bubble { padding: 10px 12px; border-radius: 12px; max-width: 90%; font-size: .92rem; }
-  .chat-bubble-user { background: var(--s2); justify-self: end; }
-  .chat-bubble-bot { background: rgba(107,227,190,.1); border: 1px solid rgba(107,227,190,.3); }
-  .chat-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chat-question-btn { background: var(--s2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
-  .chat-question-btn:disabled { opacity: .5; cursor: default; }
-  footer { margin-top: 48px; border-top: 1px solid var(--line); padding: 24px 0 40px; color: var(--muted); font-size: .88rem; }
-  footer p { margin: 4px 0; }
-  .js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
-  .js-ready .reveal.is-visible { opacity: 1; transform: none; }
-  @media (prefers-reduced-motion: reduce) {
-    html { scroll-behavior: auto; }
-    .js-ready .reveal { opacity: 1; transform: none; transition: none; }
-    #scroll-progress { transition: none; }
-  }
-"""
+_STYLE = (_ASSETS / "style.css").read_text(encoding="utf-8").replace("/*FONTS*/", _font_css())
 
 _CONCEPT_ICONS = {
     "revenue": "💰",
@@ -1086,30 +1278,50 @@ def _revenue_line_chart_svg(
       </svg>"""
 
 
-def _stat_cards(verified: dict) -> str:
-    """3 tarjetas grandes con los números que más importan de un vistazo —
-    los mismos que ya están citados en el grid de abajo, solo con más
-    jerarquía visual (estilo tablero)."""
-    keys = (("revenue", "Ingresos"), ("ebitda", "EBITDA (derivado)"), ("net_income", "Utilidad neta"))
-    cards = []
-    for key, label in keys:
-        cv = verified.get(key)
-        if cv is None:
-            continue
-        icon = _CONCEPT_ICONS.get(key, "🔎")
-        cards.append(
-            f"""
-      <div class="stat-card reveal">
-        <span class="stat-icon" aria-hidden="true">{icon}</span>
-        <div>
-          <p class="stat-label">{_esc(label)}</p>
-          <p class="stat-value"{_count_attr(cv.value)}>{_esc(_fmt_money(cv.value))}</p>
+def _kpi(icon: str, label: str, value_text: str, count_attr: str, tint: str, tag_kind: str, tag_text: str, foot: str) -> str:
+    return f"""
+      <article class="kpi {tint} reveal spot">
+        <div class="kpi-body">
+          <p class="kpi-label"><span aria-hidden="true">{icon}</span>{_esc(label)}</p>
+          <p class="kpi-value"{count_attr}>{_esc(value_text)}</p>
         </div>
-      </div>"""
-        )
+        <div class="kpi-foot"><span>{_esc(foot)}</span><span class="tag tag-{tag_kind}">{_esc(tag_text)}</span></div>
+      </article>"""
+
+
+def _kpi_for(verified: dict, key: str, label: str, tint: str) -> str:
+    cv = verified.get(key)
+    if cv is None:
+        return ""
+    if cv.no_verificado:
+        kind, tag = "warn", "no verificado"
+    elif cv.derivado:
+        kind, tag = "info", "derivado"
+    else:
+        kind, tag = "ok", "citado"
+    foot = cv.citation.seccion if (cv.citation is not None and not cv.derivado) else "del mismo reporte"
+    return _kpi(_CONCEPT_ICONS.get(key, "🔎"), label, _fmt_money(cv.value), _count_attr(cv.value), tint, kind, tag, foot)
+
+
+def _stat_cards(verified: dict, fcf: FcfResult | None = None, cagr: CagrResult | None = None) -> str:
+    """Tablero de tarjetas grandes (estilo dashboard) con los números que más
+    importan de un vistazo: los mismos que ya están citados en el grid de
+    abajo, solo con más jerarquía visual. Nada nuevo se calcula aquí."""
+    cards = [
+        _kpi_for(verified, "revenue", "Ingresos", "t-vio"),
+        _kpi_for(verified, "ebitda", "EBITDA (derivado)", "t-mint"),
+        _kpi_for(verified, "net_income", "Utilidad neta", "t-amb"),
+    ]
+    if cagr is not None:
+        if cagr.value is not None:
+            cards.append(_kpi("📈", "CAGR de ingresos", f"{cagr.value:+.2%}", _count_attr(cagr.value * 100, suffix="%"),
+                              "t-cor", "info", "calculado", "en código, no por IA"))
+        else:
+            cards.append(_kpi("📈", "CAGR de ingresos", "no verificado", "", "t-cor", "warn", "no verificado", "faltan años citados"))
+    cards = [c for c in cards if c]
     if not cards:
         return ""
-    return f'<div class="stat-row">{"".join(cards)}</div>'
+    return f'<div class="kpi-row">{"".join(cards)}</div>'
 
 
 def _badge(cv: CitedValue) -> str:
@@ -1141,7 +1353,7 @@ def _figure_card(index: int, key: str, label: str, cv: CitedValue) -> str:
         )
     delay = min(index, 6) * 60
     return f"""
-      <article class="card reveal" style="transition-delay:{delay}ms" data-key="{_esc(key)}" data-figure-label="{_esc(label)}">
+      <article class="card reveal spot" style="transition-delay:{delay}ms" data-key="{_esc(key)}" data-figure-label="{_esc(label)}">
         <header class="card-head">
           <span class="card-icon" aria-hidden="true">{icon}</span>
           <h3>{_esc(label)}</h3>
@@ -1159,30 +1371,210 @@ def _site_header() -> str:
     return """
   <header class="site-header">
     <div class="wrap">
-      <span class="brand">Quant <span>Lab</span></span>
+      <span class="brand">
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#06070d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg></span>
+        Quant <span class="lab">Lab</span>
+      </span>
       <nav class="nav" aria-label="Secciones">
         <a href="#reporte">1 · Reporte</a>
+        <a href="#prueba">Pruébalo</a>
         <a href="#simulacion">2 · Simulación</a>
         <a href="#diario">3 · Diario</a>
         <a href="#como-funciona">Cómo se verifica</a>
       </nav>
+      <span class="clock"><span class="dot-live" aria-hidden="true"></span><span id="clock">--:--:-- UTC</span></span>
       <span class="pill">Solo investigación</span>
     </div>
   </header>
+  <div class="ticker" id="ticker" aria-label="Cinta de precios (TradingView, externa y sin verificar)"></div>
   <div class="strip"><div class="wrap">Análisis informativo, no es asesoría financiera. Nunca dice "compra" ni "vende": la decisión es tuya.</div></div>"""
 
 
-def _hero(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime) -> str:
+def _bg_fx() -> str:
+    return """
+  <div class="bg-fx" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <i class="orb orb-1"></i><i class="orb orb-2"></i><i class="orb orb-3"></i>
+    <canvas id="bg-canvas"></canvas>
+  </div>"""
+
+
+def _bot_markup() -> str:
+    face = (
+        '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none">'
+        '<line x1="20" y1="3" x2="20" y2="9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'
+        '<circle cx="20" cy="3.2" r="2.2" fill="#2bd9a0"/>'
+        '<rect x="6" y="9" width="28" height="23" rx="9" fill="#0b0820" stroke="#fff" stroke-opacity=".85" stroke-width="2"/>'
+        '<ellipse class="bot-eye" cx="14.5" cy="20" rx="3" ry="3.6" fill="#2bd9a0"/>'
+        '<ellipse class="bot-eye" cx="25.5" cy="20" rx="3" ry="3.6" fill="#2bd9a0"/>'
+        '<path d="M15 27.2q5 3 10 0" stroke="#9a8fff" stroke-width="2" stroke-linecap="round"/></svg>'
+    )
+    return f"""
+  <div class="bot-fab">
+    <div class="bot-greet">¿Te ayudo a leer el reporte? Pregúntame lo que quieras.</div>
+    <button type="button" class="bot-btn" id="bot-open" aria-label="Abrir el asistente Quant" aria-expanded="false" aria-controls="bot-drawer">{face}</button>
+  </div>
+  <div class="bot-scrim" id="bot-scrim"></div>
+  <aside class="bot-drawer" id="bot-drawer" role="dialog" aria-label="Asistente Quant" aria-hidden="true">
+    <div class="bot-drawer-head">
+      <span class="bot-avatar" aria-hidden="true">🤖</span>
+      <div class="who"><b>Quant</b><small><span class="dot-live" style="display:inline-block;margin-right:6px"></span>asistente del pipeline · respuestas preparadas</small></div>
+      <button type="button" class="icon-btn" id="bot-reset" aria-label="Reiniciar conversación" title="Reiniciar">↺</button>
+      <button type="button" class="icon-btn" id="bot-close" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="bot-scroll" id="bot-scroll">
+      <canvas id="bot-orb" width="320" height="320" aria-hidden="true"></canvas>
+      <div class="bot-log" id="bot-log" aria-live="polite"></div>
+      <div class="chip-row" id="bot-chips"></div>
+    </div>
+    <div class="bot-input-row">
+      <input type="text" id="bot-input" maxlength="200" placeholder="Pregúntale a Quant…" aria-label="Tu pregunta" autocomplete="off">
+      <button type="button" class="bot-send" id="bot-send" aria-label="Enviar">➤</button>
+    </div>
+    <p class="bot-fine">Respuestas ya preparadas con las cifras verificadas; no es un chat en vivo y no es asesoría financiera. No escribas datos personales.</p>
+  </aside>"""
+
+
+def _kb_item(pregunta: str, respuesta: str, keywords: list[str]) -> dict:
+    return {"pregunta": pregunta, "respuesta": respuesta, "keywords": keywords}
+
+
+def _bot_kb(empresa: str, filing_doc_id: str, verified: dict, fcf: FcfResult, cagr: CagrResult) -> list[dict]:
+    """Base de conocimiento del asistente: texto fijo sobre el método y
+    respuestas sobre ESTE reporte armadas aquí, en código, con sus mismas
+    cifras. Nada se genera en el navegador ni se llama a ningún modelo."""
+    kb = []
+    rev = verified.get("revenue")
+    if rev is not None and rev.value is not None:
+        cita = f" Está citado en «{rev.citation.seccion}» ({rev.citation.doc_id}); abre «Ver fuente» en la tarjeta de Ingresos." if rev.citation else ""
+        kb.append(_kb_item(
+            "¿Cuánto fueron los ingresos?",
+            f"En el reporte de ejemplo ({empresa}, {filing_doc_id}) los ingresos son {_fmt_money(rev.value)}.{cita}",
+            ["ingresos", "ventas", "revenue", "facturacion", "cuanto"],
+        ))
+    faltan = [label for key, label in _DISPLAY_ORDER if verified[key].no_verificado]
+    if faltan:
+        kb.append(_kb_item(
+            "¿Qué cifras no se pudieron verificar?",
+            "En este reporte quedaron sin verificar: " + ", ".join(faltan) + ". No se usaron en ningún cálculo.",
+            ["verificar", "verificado", "verificadas", "faltan", "falta", "cifras", "sin"],
+        ))
+    else:
+        kb.append(_kb_item(
+            "¿Qué cifras no se pudieron verificar?",
+            "En este reporte todas las cifras de la tabla tienen una cita comprobada contra el documento original.",
+            ["verificar", "verificado", "verificadas", "faltan", "falta", "cifras", "sin"],
+        ))
+    if cagr.value is not None:
+        kb.append(_kb_item(
+            "¿Cuál es el CAGR de ingresos?",
+            f"El CAGR de ingresos de este reporte es {cagr.value:+.2%}. {cagr.nota} Lo calcula el código con cifras ya citadas, no la IA.",
+            ["cagr", "crecimiento", "crecio", "tasa", "anual"],
+        ))
+    if fcf.value is None:
+        kb.append(_kb_item(
+            "¿Por qué no hay flujo de caja libre (FCF)?",
+            f"El FCF no se pudo calcular: {fcf.nota} Es una limitación de los datos disponibles, no un juicio sobre la empresa.",
+            ["fcf", "flujo", "caja", "libre", "free", "cash"],
+        ))
+    kb += [
+        _kb_item(
+            "¿Cómo se verifica cada cifra?",
+            "El código extrae la cifra de los datos estructurados del documento oficial y guarda la frase exacta. "
+            "Un verificador vuelve a abrir el documento descargado (con su huella hash) y comprueba que la frase exista "
+            "literal. Si no existe, la cifra se descarta y se marca «no verificado». La IA nunca ve el documento crudo.",
+            ["verifica", "verificar", "verificacion", "cita", "citas", "hash", "huella", "fuente", "como", "funciona", "pipeline"],
+        ),
+        _kb_item(
+            "¿Qué significa «no verificado»?",
+            "Que no se encontró una fuente que respalde la cifra. En ese caso el sistema lo dice en lugar de inventar, "
+            "y esa cifra no entra en ningún cálculo.",
+            ["verificado", "significa", "inventar", "fuente", "falta"],
+        ),
+        _kb_item(
+            "¿Qué diferencia hay entre Capa A y Capa B?",
+            "La Capa A son hechos con cita exacta del documento oficial. La Capa B son escenarios simulados con "
+            "supuestos que tú ves y cambias: muestran probabilidades, no predicciones. Nunca se mezclan: nada "
+            "simulado cruza hacia los hechos, y una cita nunca justifica un precio simulado.",
+            ["capa", "diferencia", "hechos", "simulado", "simulacion", "escenarios", "separadas", "mezclan"],
+        ),
+        _kb_item(
+            "¿Qué es el Monte Carlo y qué no es?",
+            "Simula miles de caminos posibles del precio con un modelo (movimiento browniano geométrico) usando μ y σ. "
+            "Estima probabilidades y riesgo; no predice el futuro, supone que el pasado reciente se parece al futuro y "
+            "subestima caídas extremas. Sus probabilidades no están validadas con un backtest.",
+            ["monte", "carlo", "simulacion", "simular", "probabilidad", "probabilidades", "var", "percentil", "gbm", "riesgo", "prediccion"],
+        ),
+        _kb_item(
+            "¿De dónde salen los gráficos en vivo?",
+            "De widgets externos de TradingView, cargados en un marco aislado (sandbox). Este proyecto no los "
+            "verifica: sirven solo como referencia visual y sus datos pueden ir con retraso.",
+            ["tradingview", "grafico", "graficos", "grafica", "vivo", "noticias", "widget", "precio", "precios"],
+        ),
+        _kb_item(
+            "¿Esto es asesoría financiera?",
+            "No. Es una herramienta para investigar y justificar. Nunca dice «compra» ni «vende»: la decisión y el "
+            "riesgo que aceptas son tuyos.",
+            ["asesoria", "financiera", "consejo", "recomendacion", "recomiendas", "invertir", "comprar", "vender", "debo"],
+        ),
+        _kb_item(
+            "¿Qué es el Diario de decisiones?",
+            "Un formulario para anotar qué hecho verificado y qué escenario simulado miraste, tu postura y tu "
+            "razonamiento, en campos separados. No guarda nada: copias el texto o descargas un .md.",
+            ["diario", "decisiones", "decision", "notion", "guardar", "anotar"],
+        ),
+    ]
+    return kb
+
+
+def _hero(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime, verified: dict | None = None) -> str:
+    cited = derived = missing = 0
+    for key, _label in _DISPLAY_ORDER:
+        cv = (verified or {}).get(key)
+        if cv is None:
+            continue
+        if cv.no_verificado:
+            missing += 1
+        elif cv.derivado:
+            derived += 1
+        else:
+            cited += 1
+    if missing:
+        warn_line = f"{missing} sin verificar: quedan fuera de todo cálculo."
+        warn_ico = '<span class="ico ico-warn">!</span>'
+    else:
+        warn_line = "Ninguna cifra quedó sin verificar."
+        warn_ico = '<span class="ico ico-ok">✓</span>'
     return f"""
   <section class="hero wrap">
-    <h1>Qué dice el reporte, y qué podría pasar.</h1>
-    <p>Dos capas separadas a propósito: arriba, hechos con cita del documento oficial; abajo, escenarios
-    simulados que no son predicciones. Nunca se mezclan.</p>
-    <div class="chips">
-      <span class="pill">{_esc(empresa_ejemplo)}</span>
-      <span class="pill">{_esc(filing_doc_id)}</span>
-      <span class="pill">generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</span>
+    <div>
+      <span class="eyebrow"><span class="dot-live" aria-hidden="true"></span>Monitor de reportes con citas verificables</span>
+      <h1>Qué dice el reporte, <em class="serif grad-text">y qué podría pasar.</em></h1>
+      <p class="lead">Dos capas separadas a propósito: arriba, hechos con cita del documento oficial; abajo,
+      escenarios simulados que no son predicciones. Nunca se mezclan.</p>
+      <div class="chips">
+        <span class="pill">{_esc(empresa_ejemplo)}</span>
+        <span class="pill">{_esc(filing_doc_id)}</span>
+        <span class="pill">generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</span>
+      </div>
+      <div class="hero-cta">
+        <a class="btn" href="#reporte">Ver el reporte ↓</a>
+        <button type="button" class="btn btn-ghost" data-open-bot>🤖 Preguntarle a Quant</button>
+      </div>
     </div>
+    <aside class="agent-card reveal" aria-label="Estado de la verificación">
+      <div class="agent-top"><span class="dot-live" aria-hidden="true"></span>VERIFICACIÓN COMPLETADA</div>
+      <div class="agent-metrics">
+        <div class="agent-metric"><small>Citadas</small><b>{cited}</b></div>
+        <div class="agent-metric"><small>Derivadas</small><b>{derived}</b></div>
+        <div class="agent-metric"><small>Sin verificar</small><b>{missing}</b></div>
+      </div>
+      <ul class="agent-feed">
+        <li><span class="ico ico-ok">✓</span><span>{cited} cifras con su frase exacta comprobada en el documento original.</span></li>
+        <li><span class="ico ico-info">ƒ</span><span>{derived} derivadas por código a partir de las anteriores, sin IA de por medio.</span></li>
+        <li>{warn_ico}<span>{_esc(warn_line)}</span></li>
+      </ul>
+    </aside>
   </section>"""
 
 
@@ -1271,7 +1663,7 @@ def _pipeline_section() -> str:
         arrow = '<span class="step-arrow" aria-hidden="true">→</span>' if i < len(_PIPELINE_STEPS) - 1 else ""
         steps.append(
             f"""
-        <div class="step reveal" style="transition-delay:{delay}ms">
+        <div class="step reveal spot" style="transition-delay:{delay}ms">
           <div class="step-icon" aria-hidden="true">{icon}</div>
           <h3>{_esc(title)}</h3>
           <p>{_esc(body)}</p>
@@ -1317,12 +1709,12 @@ def _calc_cards(fcf: FcfResult, cagr: CagrResult) -> str:
     cagr_pct = cagr.value * 100 if cagr.value is not None else None
     return f"""
     <section class="calc-grid" aria-label="Cálculos">
-      <article class="card reveal">
+      <article class="card reveal spot">
         <header class="card-head"><span class="card-icon" aria-hidden="true">🧮</span><h3>FCF</h3></header>
         <p class="card-value"{_count_attr(fcf.value)}>{_esc(_fmt_money(fcf.value))}</p>
         <p class="card-note">{_esc(fcf.nota)}</p>
       </article>
-      <article class="card reveal">
+      <article class="card reveal spot">
         <header class="card-head"><span class="card-icon" aria-hidden="true">📈</span><h3>CAGR de ingresos</h3></header>
         <p class="card-value"{_count_attr(cagr_pct, suffix="%")}>{_esc(cagr_text)}</p>
         <p class="card-note">{_esc(cagr.nota)}</p>
@@ -1335,7 +1727,7 @@ def _try_it_section(companies: dict | None) -> str:
         return ""
     companies_json = _json.dumps(companies, ensure_ascii=False, separators=(",", ":"))
     return f"""
-    <section class="try-it reveal" aria-labelledby="try-it-title">
+    <section class="try-it reveal" id="prueba" aria-labelledby="try-it-title">
       <p class="try-it-warning">
         <strong>⚠️ Esto es una prueba (experimental).</strong> La lectura de "barata" o "cara" es
         automática y simple (P/E y FCF yield con dos umbrales fijos) — no es la metodología
@@ -1374,7 +1766,8 @@ def build_html_report(
     cards = "".join(
         _figure_card(i, key, label, verified[key]) for i, (key, label) in enumerate(_DISPLAY_ORDER)
     )
-    stat_cards = _stat_cards(verified)
+    stat_cards = _stat_cards(verified, fcf, cagr)
+    bot_kb_json = _json.dumps(_bot_kb(empresa_ejemplo, filing_doc_id, verified, fcf, cagr), ensure_ascii=False, separators=(",", ":"))
     revenue_series_points = [
         {"period_end": cv.period_end, "value": cv.value}
         for cv in (verified.get("revenue_series") or [])
@@ -1382,7 +1775,7 @@ def build_html_report(
     ]
     revenue_chart = _revenue_line_chart_svg(revenue_series_points)
     chart_card = (
-        f'<div class="card chart-card reveal"><h3>📈 Ingresos por año (mismo documento citado arriba)</h3>{revenue_chart}</div>'
+        f'<div class="card chart-card reveal spot"><h3>📈 Ingresos por año (mismo documento citado arriba)</h3>{revenue_chart}</div>'
         if revenue_chart
         else ""
     )
@@ -1403,13 +1796,15 @@ def build_html_report(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{_CSP}">
 <meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#06070d">
 <title>{_esc(empresa_ejemplo)} — Reporte Quant Lab</title>
 <style>{_STYLE}</style>
 </head>
 <body>
+  {_bg_fx()}
   <div id="scroll-progress"></div>
   {_site_header()}
-  {_hero(empresa_ejemplo, filing_doc_id, generated_at)}
+  {_hero(empresa_ejemplo, filing_doc_id, generated_at, verified)}
   <main class="wrap">
     <section class="layer layer-a" id="reporte">
       <span class="layer-tag">CAPA A · HECHOS VERIFICADOS</span>
@@ -1441,6 +1836,8 @@ def build_html_report(
       </p>
     </div>
   </footer>
+  {_bot_markup()}
+  <div id="bot-data" hidden data-kb="{_esc(bot_kb_json)}"></div>
   <script>{_SCRIPT}</script>
 </body>
 </html>
