@@ -540,8 +540,20 @@ _SCRIPT = """(function () {
       return c;
     }
 
+    function smooth(pts, skipMove) {
+      var d = skipMove ? "" : "M" + pts[0][0].toFixed(1) + "," + pts[0][1].toFixed(1);
+      for (var i = 0; i < pts.length - 1; i++) {
+        var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+        var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+        var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+        d += " C" + c1x.toFixed(1) + "," + c1y.toFixed(1) + " " + c2x.toFixed(1) + "," + c2y.toFixed(1) +
+          " " + p2[0].toFixed(1) + "," + p2[1].toFixed(1);
+      }
+      return d;
+    }
+
     function fanChart(s, days) {
-      var W = 640, H = 280, L = 56, R = 12, T = 12, B = 28;
+      var W = 640, H = 280, L = 78, R = 12, T = 12, B = 28;
       var svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img" }, "mc-chart");
       svg.setAttribute("aria-label", "Trayectorias simuladas del capital con bandas P5-P95");
       var all = [];
@@ -552,22 +564,17 @@ _SCRIPT = """(function () {
       var span = yMax - yMin || 1;
       function X(d) { return L + ((W - L - R) * d) / days; }
       function Y(v) { return T + (H - T - B) * (1 - (v - yMin) / span); }
-      function path(vals) {
-        return vals.map(function (v, i) { return (i ? "L" : "M") + X(s.stepIdx[i]).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
+      function pts(vals) { return vals.map(function (v, i) { return [X(s.stepIdx[i]), Y(v)]; }); }
+      function col(q) { return s.bands.map(function (b) { return b[q]; }); }
+      function area(topQ, botQ) {
+        var top = pts(col(topQ));
+        var bot = pts(col(botQ)).reverse();
+        return smooth(top) + " L" + bot[0][0].toFixed(1) + "," + bot[0][1].toFixed(1) + " " + smooth(bot, true) + " Z";
       }
-      var upper = s.bands.map(function (b) { return b[4]; });
-      var lower = s.bands.map(function (b) { return b[0]; });
-      var upper2 = s.bands.map(function (b) { return b[3]; });
-      var lower2 = s.bands.map(function (b) { return b[1]; });
-      function area(top, bottom) {
-        var fwd = top.map(function (v, i) { return (i ? "L" : "M") + X(s.stepIdx[i]).toFixed(1) + "," + Y(v).toFixed(1); }).join(" ");
-        var back = bottom.map(function (v, i) { return "L" + X(s.stepIdx[bottom.length - 1 - i]).toFixed(1) + "," + Y(bottom[bottom.length - 1 - i]).toFixed(1); }).join(" ");
-        return fwd + " " + back + " Z";
-      }
-      svg.appendChild(svgEl("path", { d: area(upper, lower) }, "mc-band-outer"));
-      svg.appendChild(svgEl("path", { d: area(upper2, lower2) }, "mc-band-inner"));
-      s.samplePaths.forEach(function (sp) { svg.appendChild(svgEl("path", { d: path(sp) }, "mc-path")); });
-      svg.appendChild(svgEl("path", { d: path(s.bands.map(function (b) { return b[2]; })) }, "mc-median"));
+      svg.appendChild(svgEl("path", { d: area(4, 0) }, "mc-band-outer"));
+      svg.appendChild(svgEl("path", { d: area(3, 1) }, "mc-band-inner"));
+      s.samplePaths.forEach(function (sp) { svg.appendChild(svgEl("path", { d: smooth(pts(sp)) }, "mc-path")); });
+      svg.appendChild(svgEl("path", { d: smooth(pts(col(2))) }, "mc-median"));
       svg.appendChild(svgEl("line", { x1: L, x2: W - R, y1: Y(s.capital), y2: Y(s.capital) }, "mc-capital-line"));
       [[yMax, T + 4], [s.capital, Y(s.capital) - 4], [yMin, H - B - 2]].forEach(function (pair) {
         var t = svgEl("text", { x: L - 6, y: pair[1], "text-anchor": "end" }, "mc-axis");
@@ -578,6 +585,44 @@ _SCRIPT = """(function () {
         var t = svgEl("text", { x: a[0] === 0 ? L : W - R, y: H - 8, "text-anchor": a[1] }, "mc-axis");
         t.textContent = a[2];
         svg.appendChild(t);
+      });
+      // Globo al pasar el mouse / tocar: día y escenarios P95, P50, P5 de ese día.
+      var cursor = svgEl("line", { x1: 0, x2: 0, y1: T, y2: H - B, visibility: "hidden" }, "mc-cursor");
+      var tip = svgEl("g", { visibility: "hidden" });
+      tip.appendChild(svgEl("rect", { x: 0, y: 0, width: 150, height: 62, rx: 10 }, "mc-tip-box"));
+      var tipLines = [0, 1, 2, 3].map(function (i) {
+        var t = svgEl("text", { x: 10, y: 16 + i * 14 }, "mc-tip-text");
+        tip.appendChild(t);
+        return t;
+      });
+      svg.appendChild(cursor);
+      svg.appendChild(tip);
+      function moveTip(evt) {
+        var rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        var x = ((evt.clientX - rect.left) / rect.width) * W;
+        var best = 0, bestDist = Infinity;
+        s.stepIdx.forEach(function (d, i) {
+          var dist = Math.abs(X(d) - x);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        });
+        var cx = X(s.stepIdx[best]);
+        cursor.setAttribute("x1", cx); cursor.setAttribute("x2", cx);
+        cursor.setAttribute("visibility", "visible");
+        var b = s.bands[best];
+        tipLines[0].textContent = "día " + s.stepIdx[best];
+        tipLines[1].textContent = "P95 " + usd(b[4]);
+        tipLines[2].textContent = "P50 " + usd(b[2]);
+        tipLines[3].textContent = "P5  " + usd(b[0]);
+        var tx = cx + 12 + 150 > W ? cx - 162 : cx + 12;
+        tip.setAttribute("transform", "translate(" + tx.toFixed(1) + "," + (T + 6) + ")");
+        tip.setAttribute("visibility", "visible");
+      }
+      svg.addEventListener("pointermove", moveTip);
+      svg.addEventListener("pointerdown", moveTip);
+      svg.addEventListener("pointerleave", function () {
+        cursor.setAttribute("visibility", "hidden");
+        tip.setAttribute("visibility", "hidden");
       });
       return svg;
     }
@@ -644,6 +689,14 @@ _SCRIPT = """(function () {
         render(summarize(simulateGBM(r.p)), r.p);
         runBtn.disabled = false;
       }, 0);
+    });
+
+    document.querySelectorAll("#mc-horizon button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        fields.days.value = btn.getAttribute("data-days");
+        document.querySelectorAll("#mc-horizon button").forEach(function (b) { b.classList.toggle("is-on", b === btn); });
+        runBtn.click();
+      });
     });
 
     window.__qlLastSim = function () { return lastSummary; };
@@ -743,6 +796,40 @@ _SCRIPT = """(function () {
     });
   })();
 
+  // --- Vistas tipo app: el menú lateral muestra una sección a la vez. Sin
+  // JS (o si falla) todas las secciones quedan visibles una tras otra.
+  (function () {
+    var navBtns = document.querySelectorAll(".nav-btn");
+    var views = document.querySelectorAll(".view");
+    function show(name) {
+      var found = false;
+      views.forEach(function (v) {
+        var on = v.getAttribute("data-view") === name;
+        v.classList.toggle("is-active", on);
+        if (on) {
+          found = true;
+          v.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("is-visible"); });
+        }
+      });
+      if (!found) return false;
+      navBtns.forEach(function (b) { b.classList.toggle("is-active", b.getAttribute("data-view") === name); });
+      return true;
+    }
+    navBtns.forEach(function (b) {
+      b.addEventListener("click", function (e) {
+        e.preventDefault();
+        var name = b.getAttribute("data-view");
+        if (show(name)) {
+          window.scrollTo(0, 0);
+          if (window.history && window.history.replaceState) window.history.replaceState(null, "", "#" + name);
+        }
+      });
+    });
+    var initial = (window.location.hash || "").slice(1);
+    if (!show(initial)) show("reporte");
+    if (initial) window.scrollTo(0, 0);
+  })();
+
   var items = document.querySelectorAll(".reveal");
   if (prefersReduced || !("IntersectionObserver" in window)) {
     items.forEach(function (el) { el.classList.add("is-visible"); });
@@ -784,171 +871,196 @@ _CSP = (
 
 _STYLE = """
   :root {
-    --bg: #0A0D11;
-    --s1: #10151B;
-    --s2: #161C24;
-    --line: #232B35;
+    --bg: #060918;
+    --card: rgba(255,255,255,.045);
+    --card-2: rgba(255,255,255,.08);
+    --line: rgba(255,255,255,.09);
+    --blue: #6C7CFF;
+    --blue-2: #3B4BD8;
+    --vio: #B6A6FF;
     --mint: #6BE3BE;
-    --vio: #BBA8FF;
     --amb: #F6BC52;
     --cor: #FF8F80;
-    --paper: #E9EEF3;
-    --ink: #12161C;
-    --text: #E6EBF1;
-    --muted: #8D98A6;
-    --radius: 14px;
+    --text: #EEF1FF;
+    --muted: #8E98C0;
+    --radius: 24px;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --glass: linear-gradient(155deg, rgba(88,104,255,.20), rgba(255,255,255,.035) 55%);
   }
   * { box-sizing: border-box; }
+  :root { color-scheme: dark; }
   html { scroll-behavior: smooth; }
   body {
-    margin: 0; background: var(--bg); color: var(--text); line-height: 1.55;
+    margin: 0; color: var(--text); line-height: 1.55; min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background:
+      radial-gradient(900px 600px at 70% -10%, rgba(76,92,255,.35), transparent 60%),
+      radial-gradient(700px 600px at 0% 40%, rgba(120,70,255,.18), transparent 60%),
+      var(--bg);
+    background-attachment: fixed;
   }
-  a { color: var(--mint); }
-  h1, h2, h3, h4 { line-height: 1.2; margin: 0; }
-  #scroll-progress {
-    position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 50;
-    background: linear-gradient(90deg, var(--mint), var(--vio)); transition: width .1s linear;
-  }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
-  .site-header { border-bottom: 1px solid var(--line); background: rgba(10,13,17,.92); position: sticky; top: 0; z-index: 40; }
-  .site-header .wrap { display: flex; align-items: center; gap: 18px; padding-top: 12px; padding-bottom: 12px; flex-wrap: wrap; }
-  .brand { font-weight: 700; letter-spacing: .02em; }
-  .brand span { color: var(--mint); }
-  .nav { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; }
-  .nav a { color: var(--muted); text-decoration: none; padding: 6px 12px; border-radius: 999px; font-size: .9rem; }
-  .nav a:hover, .nav a:focus-visible { color: var(--text); background: var(--s2); }
-  .pill { font-size: .78rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--s1); }
-  .strip { background: var(--s1); border-bottom: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
-  .strip .wrap { padding-top: 8px; padding-bottom: 8px; }
-  .hero { padding: 44px 20px 20px; }
-  .hero h1 { font-size: clamp(1.9rem, 4.5vw, 2.9rem); letter-spacing: -.02em; max-width: 18ch; }
-  .hero p { color: var(--muted); max-width: 62ch; margin: 12px 0 0; }
-  .hero .chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
-  .layer { margin: 28px 0; }
-  .layer-tag { display: inline-block; font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; padding: 4px 10px; border-radius: 6px; margin-bottom: 12px; }
-  .layer-a .layer-tag { color: var(--mint); background: rgba(107,227,190,.12); border: 1px solid rgba(107,227,190,.35); }
-  .layer-b .layer-tag { color: var(--vio); background: rgba(187,168,255,.12); border: 1px dashed rgba(187,168,255,.5); }
-  .layer h2 { font-size: 1.4rem; margin: 22px 0 8px; }
-  .section-intro { color: var(--muted); margin: 0 0 14px; max-width: 70ch; }
-  .risk { border: 1px solid rgba(246,188,82,.5); background: rgba(246,188,82,.08); border-radius: var(--radius); padding: 18px 20px; }
-  .risk h2 { margin-top: 0; color: var(--amb); font-size: 1.15rem; }
+  a { color: var(--vio); }
+  h1, h2, h3, h4 { line-height: 1.2; margin: 0; font-weight: 600; }
+  #scroll-progress { position: fixed; top: 0; left: 0; height: 3px; width: 0%; z-index: 60; background: linear-gradient(90deg, var(--blue), var(--vio)); transition: width .1s linear; }
+  .app { display: grid; grid-template-columns: 96px 1fr; min-height: 100vh; }
+  .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 22px 0; }
+  .logo { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; font-weight: 800; background: linear-gradient(145deg, var(--blue), var(--vio)); color: #080B22; margin-bottom: 14px; }
+  .nav-btn { width: 64px; padding: 10px 0 8px; border-radius: 20px; text-align: center; text-decoration: none; color: var(--muted); background: var(--card); border: 1px solid var(--line); font-size: .68rem; display: flex; flex-direction: column; gap: 2px; align-items: center; }
+  .nav-btn .ico { font-size: 1.25rem; line-height: 1; }
+  .nav-btn:hover { color: var(--text); background: var(--card-2); }
+  .nav-btn.is-active { background: #fff; color: #0A0E2A; border-color: #fff; font-weight: 700; }
+  .main { padding: 22px 28px 40px 8px; min-width: 0; }
+  .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .topbar .grow { flex: 1; }
+  .pill { font-size: .8rem; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--card); }
+  .pill strong { color: var(--text); font-weight: 600; }
+  .strip { font-size: .82rem; color: var(--muted); margin: 0 0 18px; }
+  .page-title { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.02em; font-weight: 500; }
+  .page-sub { color: var(--muted); margin: 6px 0 20px; max-width: 64ch; }
+  .view { margin-bottom: 30px; }
+  .js-ready .view { display: none; }
+  .js-ready .view.is-active { display: block; }
+  .bento { display: grid; gap: 18px; grid-template-columns: repeat(12, 1fr); }
+  .span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; }
+  .span-6 { grid-column: span 6; } .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; }
+  @media (max-width: 960px) { .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; } }
+  .card, .stat-card { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 24px; backdrop-filter: blur(6px); }
+  .card h2, .card > h3 { font-size: 1.35rem; font-weight: 500; margin-bottom: 4px; }
+  .card-sub, .section-intro { color: var(--muted); font-size: .9rem; margin: 0 0 14px; }
+  .layer-tag { display: inline-block; font-family: var(--mono); font-size: .72rem; letter-spacing: .08em; padding: 4px 12px; border-radius: 999px; margin-bottom: 12px; }
+  .layer-a .layer-tag { color: var(--mint); background: rgba(107,227,190,.1); border: 1px solid rgba(107,227,190,.35); }
+  .layer-b .layer-tag { color: var(--vio); background: rgba(182,166,255,.1); border: 1px dashed rgba(182,166,255,.55); }
+  .label { color: var(--muted); font-size: .9rem; margin: 0; }
+  .big { font-size: clamp(2rem, 4vw, 3.1rem); font-weight: 500; letter-spacing: -.02em; margin: 4px 0 0; }
+  .big small { color: var(--muted); font-size: .5em; }
+  .glow-card { position: relative; overflow: hidden; background: linear-gradient(135deg, #2A3BC8 0%, #1A2478 55%, #121A55 100%); border: 1px solid rgba(160,172,255,.3); border-radius: 20px; padding: 18px 20px; margin-top: 16px; }
+  .glow-card::after { content: ""; position: absolute; right: -40px; top: -40px; width: 200px; height: 200px; border-radius: 50%; border: 18px solid rgba(190,180,255,.35); box-shadow: 0 0 60px rgba(150,140,255,.5), inset 0 0 40px rgba(150,140,255,.4); }
+  .glow-card .big { font-size: 2.4rem; position: relative; z-index: 1; }
+  .glow-card p { position: relative; z-index: 1; margin: 0; max-width: 24ch; }
+  .risk { border-radius: var(--radius); padding: 20px 24px; border: 1px solid rgba(246,188,82,.5); background: linear-gradient(135deg, rgba(246,188,82,.14), rgba(246,188,82,.04)); }
+  .risk h2 { color: var(--amb); font-size: 1.15rem; font-weight: 600; margin-bottom: 8px; }
   .risk ul { margin: 6px 0 10px; padding-left: 20px; }
-  .risk-note { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
-  .stat-row, .calc-grid, .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-  .stat-row { margin-bottom: 14px; }
-  .stat-card, .card { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-  .stat-card { display: flex; gap: 12px; align-items: center; }
-  .stat-icon, .card-icon { font-size: 1.3rem; }
-  .stat-label { margin: 0; color: var(--muted); font-size: .85rem; }
-  .stat-value, .card-value { margin: 2px 0 0; font-family: var(--mono); font-size: 1.35rem; font-weight: 600; }
-  .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .card-head h3 { font-size: 1rem; flex: 1; }
-  .card-note { color: var(--muted); font-size: .88rem; margin: 8px 0 0; }
-  .card-detail { margin-top: 10px; font-size: .88rem; color: var(--muted); }
-  .card-detail summary { cursor: pointer; color: var(--mint); }
-  blockquote { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--mint); background: var(--s2); color: var(--text); font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; }
-  .badge { font-size: .72rem; padding: 3px 9px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+  .risk-note { color: var(--muted); font-size: .88rem; margin: 8px 0 0; }
+  .table-wrap { overflow-x: auto; }
+  table.facts { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  table.facts th { text-align: left; color: var(--muted); font-weight: 400; font-size: .82rem; padding: 6px 10px 10px; }
+  table.facts td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.facts td.num { font-family: var(--mono); white-space: nowrap; }
+  .fact-name { display: flex; gap: 10px; align-items: center; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--card-2); flex: none; }
+  .card-detail summary { cursor: pointer; color: var(--vio); font-size: .85rem; }
+  .card-detail div { color: var(--muted); font-size: .85rem; margin-top: 6px; }
+  blockquote { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--blue); background: rgba(255,255,255,.05); color: var(--text); font-family: var(--mono); font-size: .78rem; overflow-wrap: anywhere; border-radius: 0 8px 8px 0; }
+  .badge { font-size: .74rem; padding: 4px 11px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
   .badge-ok { color: var(--mint); border-color: rgba(107,227,190,.5); background: rgba(107,227,190,.1); }
-  .badge-info { color: var(--vio); border-color: rgba(187,168,255,.5); background: rgba(187,168,255,.1); }
+  .badge-info { color: var(--vio); border-color: rgba(182,166,255,.5); background: rgba(182,166,255,.1); }
   .badge-warn { color: var(--amb); border-color: rgba(246,188,82,.5); background: rgba(246,188,82,.1); }
-  .chart-card { margin-bottom: 14px; }
-  .chart-card h3 { font-size: 1rem; margin-bottom: 8px; }
   .line-chart { width: 100%; height: auto; }
-  .chart-line { stroke: var(--mint); stroke-width: 2.5; }
-  .chart-dot { fill: var(--mint); }
-  .chart-fade-start { stop-color: var(--mint); stop-opacity: .3; }
-  .chart-fade-end { stop-color: var(--mint); stop-opacity: 0; }
+  .chart-grid { stroke: rgba(255,255,255,.08); stroke-dasharray: 3 5; }
+  .chart-line { stroke: var(--vio); stroke-width: 2.5; }
+  .chart-dot { fill: #fff; stroke: var(--blue); stroke-width: 3; }
+  .chart-fade-start { stop-color: var(--blue); stop-opacity: .35; }
+  .chart-fade-end { stop-color: var(--blue); stop-opacity: 0; }
   .chart-value-label, .chart-year-label { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .frontier { margin: 40px 0 10px; padding: 18px 0; border-top: 2px dashed var(--line); border-bottom: 2px dashed var(--line); text-align: center; color: var(--muted); font-family: var(--mono); font-size: .85rem; letter-spacing: .04em; }
-  .frontier strong { color: var(--text); }
-  .notice-b { border: 1px dashed rgba(187,168,255,.55); background: rgba(187,168,255,.07); border-radius: var(--radius); padding: 14px 18px; margin-bottom: 16px; }
+  .pills { display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
+  .pills button { background: transparent; border: 0; color: var(--muted); padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem; }
+  .pills button.is-on, .pills button:hover { background: rgba(255,255,255,.12); color: var(--text); }
+  .head-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .notice-b { border: 1px dashed rgba(182,166,255,.55); background: rgba(182,166,255,.07); border-radius: 18px; padding: 14px 18px; margin-bottom: 4px; }
   .notice-b p { margin: 0; }
-  .mc-controls { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .frontier { margin: 0 0 18px; padding: 14px 18px; border: 1px dashed var(--line); border-radius: 18px; text-align: center; color: var(--muted); font-family: var(--mono); font-size: .8rem; letter-spacing: .04em; }
+  .frontier strong { color: var(--text); }
+  .mc-controls { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
   .field label, .try-it-label { display: block; font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
   .field.wide { grid-column: 1 / -1; }
   input, select, textarea, button { font: inherit; }
-  input[type="number"], select, textarea { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
-  .btn { background: var(--mint); color: #062016; border: 0; border-radius: 8px; padding: 10px 18px; font-weight: 700; cursor: pointer; }
+  input[type="number"], select, textarea { width: 100%; background: rgba(6,9,24,.7); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--vio); outline-offset: 2px; }
+  .btn { background: #fff; color: #0A0E2A; border: 0; border-radius: 999px; padding: 11px 22px; font-weight: 700; cursor: pointer; }
   .btn:disabled { opacity: .6; cursor: progress; }
-  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid #9AA6B4; }
+  .btn-ghost { background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,.3); }
   .mc-meta { color: var(--muted); font-size: .85rem; margin: 10px 0 0; }
   .mc-error { color: var(--cor); min-height: 1.2em; margin: 8px 0 0; font-size: .9rem; }
-  .mc-stats { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 16px; }
-  .mc-stats-3 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-  .mc-stat { background: var(--s1); border: 1px dashed rgba(187,168,255,.45); border-radius: var(--radius); padding: 14px 16px; }
-  .mc-stat.mc-risk { border-color: rgba(255,143,128,.6); background: rgba(255,143,128,.06); }
+  .mc-stats { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-top: 18px; }
+  .mc-stats-3 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .mc-stat { background: var(--glass); border: 1px dashed rgba(182,166,255,.45); border-radius: 20px; padding: 16px 18px; }
+  .mc-stat.mc-risk { border-color: rgba(255,143,128,.6); background: linear-gradient(150deg, rgba(255,143,128,.14), rgba(255,255,255,.03)); }
   .mc-stat-label { margin: 0; color: var(--muted); font-size: .82rem; }
-  .mc-stat-value { margin: 4px 0 0; font-family: var(--mono); font-size: 1.5rem; font-weight: 700; }
+  .mc-stat-value { margin: 4px 0 0; font-size: 1.7rem; font-weight: 500; letter-spacing: -.01em; }
   .mc-risk .mc-stat-value { color: var(--cor); }
   .mc-stat-note { margin: 2px 0 0; color: var(--muted); font-size: .78rem; }
-  .mc-figure { margin: 16px 0 0; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .mc-figure { margin: 18px 0 0; background: var(--glass); border: 1px solid var(--line); border-radius: 20px; padding: 16px; position: relative; }
   .mc-figure figcaption { color: var(--muted); font-size: .85rem; margin-bottom: 8px; }
-  .mc-chart { width: 100%; height: auto; }
-  .mc-band-outer { fill: rgba(187,168,255,.14); }
-  .mc-band-inner { fill: rgba(187,168,255,.22); }
-  .mc-path { fill: none; stroke: rgba(187,168,255,.35); stroke-width: 1; }
-  .mc-median { fill: none; stroke: var(--vio); stroke-width: 2.5; }
+  .mc-chart { width: 100%; height: auto; touch-action: pan-y; }
+  .mc-band-outer { fill: rgba(108,124,255,.14); }
+  .mc-band-inner { fill: rgba(108,124,255,.24); }
+  .mc-path { fill: none; stroke: rgba(182,166,255,.28); stroke-width: 1; }
+  .mc-median { fill: none; stroke: #fff; stroke-width: 2.5; }
   .mc-capital-line { stroke: var(--amb); stroke-width: 1.5; stroke-dasharray: 5 4; }
   .mc-axis { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
-  .mc-bar-gain { fill: rgba(187,168,255,.7); }
-  .mc-bar-loss { fill: rgba(255,143,128,.75); }
+  .mc-cursor { stroke: rgba(255,255,255,.7); stroke-dasharray: 4 4; }
+  .mc-tip-box { fill: rgba(16,22,66,.95); stroke: rgba(160,172,255,.5); }
+  .mc-tip-text { fill: var(--text); font-size: 11px; font-family: var(--mono); }
+  .mc-bar-gain { fill: rgba(108,124,255,.75); }
+  .mc-bar-loss { fill: rgba(255,143,128,.8); }
   .limits { color: var(--muted); font-size: .88rem; margin-top: 16px; }
   .limits ul { padding-left: 20px; margin: 6px 0 0; }
-  .diary { background: var(--paper); color: var(--ink); border-radius: var(--radius); padding: 22px; margin-top: 8px; }
-  .diary h2 { margin-top: 0; }
-  .diary .section-intro, .diary label, .diary .hint { color: #4A5563; }
   .diary .grid2 { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .diary select, .diary textarea { background: #fff; color: var(--ink); border-color: #B7C1CC; }
-  .diary fieldset { border: 1px solid #B7C1CC; border-radius: 8px; padding: 8px 12px; margin: 14px 0; }
-  .diary legend { font-size: .8rem; color: #4A5563; padding: 0 6px; }
-  .diary fieldset label { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; font-size: .95rem; color: var(--ink); }
+  .diary label { font-size: .85rem; color: var(--muted); }
+  .diary fieldset { border: 1px solid var(--line); border-radius: 16px; padding: 10px 14px; margin: 14px 0; }
+  .diary legend { font-size: .8rem; color: var(--muted); padding: 0 6px; }
+  .diary fieldset label { display: inline-flex; gap: 6px; align-items: center; margin-right: 16px; font-size: .95rem; color: var(--text); }
   .diary textarea { min-height: 110px; resize: vertical; }
   .diary .preview { font-family: var(--mono); font-size: .8rem; min-height: 170px; }
   .diary .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
-  .diary .hint { font-size: .82rem; margin: 6px 0 0; }
-  .pipeline-track { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
-  .step { flex: 1 1 170px; background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-  .step h3 { font-size: .98rem; margin: 6px 0; }
+  .hint { font-size: .82rem; margin: 8px 0 0; color: var(--muted); }
+  .pipeline-track { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+  .step { flex: 1 1 170px; background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 16px 18px; }
+  .step h3 { font-size: 1rem; margin: 6px 0; }
   .step p { margin: 0; color: var(--muted); font-size: .86rem; }
   .step-icon { font-size: 1.4rem; }
   .step-arrow { align-self: center; color: var(--muted); }
-  .try-it { background: var(--s1); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 18px; }
-  .try-it-warning { background: rgba(246,188,82,.08); border: 1px solid rgba(246,188,82,.4); border-radius: 10px; padding: 10px 14px; font-size: .88rem; margin: 0 0 14px; }
+  .try-it { margin-top: 0; }
+  .try-it-warning { background: rgba(246,188,82,.08); border: 1px solid rgba(246,188,82,.4); border-radius: 16px; padding: 10px 14px; font-size: .86rem; margin: 0 0 14px; }
   .try-it-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
-  .try-it h2 { margin: 0; font-size: 1.2rem; }
+  .try-it h2 { margin: 0; font-size: 1.3rem; }
   .bot-avatar { font-size: 1.6rem; }
   .bot-avatar-sm { font-size: 1.1rem; margin-right: 6px; }
   .try-it-select { max-width: 340px; }
   .try-it-result { margin-top: 14px; }
   .try-it-result-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .try-it-price { font-family: var(--mono); font-size: .9rem; }
-  .try-it-figures { display: grid; gap: 6px; margin-top: 10px; }
-  .try-it-figure { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding: 6px 0; }
+  .try-it-figures { display: grid; gap: 4px; margin-top: 10px; }
+  .try-it-figure { display: flex; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); padding: 8px 0; }
   .try-it-figure-label { flex: 1; color: var(--muted); }
   .try-it-figure-value { font-family: var(--mono); }
   .try-it-live { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 14px; }
   .live-card h4 { margin-bottom: 8px; }
-  .live-frame { width: 100%; border: 0; border-radius: 8px; background: var(--bg); }
+  .live-frame { width: 100%; border: 0; border-radius: 14px; background: var(--bg); }
   .live-frame-chart { height: 280px; }
   .live-frame-news { height: 320px; }
   .live-note { grid-column: 1 / -1; color: var(--muted); font-size: .82rem; margin: 0; }
-  .chat-card { margin-top: 14px; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; background: var(--bg); }
+  .chat-card { margin-top: 14px; border: 1px solid var(--line); border-radius: 20px; padding: 16px; background: rgba(6,9,24,.55); }
   .chat-head { display: flex; align-items: center; }
   .chat-warn { color: var(--muted); font-size: .82rem; margin: 6px 0 10px; }
   .chat-log { display: grid; gap: 8px; margin-bottom: 10px; }
-  .chat-bubble { padding: 10px 12px; border-radius: 12px; max-width: 90%; font-size: .92rem; }
-  .chat-bubble-user { background: var(--s2); justify-self: end; }
-  .chat-bubble-bot { background: rgba(107,227,190,.1); border: 1px solid rgba(107,227,190,.3); }
+  .chat-bubble { padding: 10px 14px; border-radius: 18px; max-width: 90%; font-size: .92rem; }
+  .chat-bubble-user { background: var(--card-2); justify-self: end; }
+  .chat-bubble-bot { background: linear-gradient(135deg, rgba(76,92,255,.35), rgba(76,92,255,.12)); border: 1px solid rgba(160,172,255,.35); }
   .chat-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-  .chat-question-btn { background: var(--s2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .chat-question-btn { background: var(--card-2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer; }
   .chat-question-btn:disabled { opacity: .5; cursor: default; }
-  footer { margin-top: 48px; border-top: 1px solid var(--line); padding: 24px 0 40px; color: var(--muted); font-size: .88rem; }
+  footer { margin-top: 34px; border-top: 1px solid var(--line); padding: 22px 0 8px; color: var(--muted); font-size: .88rem; }
   footer p { margin: 4px 0; }
   .js-ready .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
   .js-ready .reveal.is-visible { opacity: 1; transform: none; }
+  @media (max-width: 720px) {
+    .app { grid-template-columns: 1fr; }
+    .sidebar { position: fixed; bottom: 0; left: 0; right: 0; top: auto; height: auto; flex-direction: row; justify-content: center; padding: 8px; z-index: 55; background: rgba(6,9,24,.92); border-top: 1px solid var(--line); }
+    .logo { display: none; }
+    .nav-btn { width: 56px; padding: 6px 0; }
+    .main { padding: 16px 14px 90px; }
+  }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     .js-ready .reveal { opacity: 1; transform: none; transition: none; }
@@ -1043,7 +1155,7 @@ def _revenue_line_chart_svg(
     values = [p["value"] for p in points]
     min_v, max_v = min(values), max(values)
     span = (max_v - min_v) or 1.0
-    pad_x, pad_top, pad_bottom = 28, 28, 24
+    pad_x, pad_top, pad_bottom = 48, 28, 24
     n = len(points)
 
     def px(i: int) -> float:
@@ -1058,6 +1170,10 @@ def _revenue_line_chart_svg(
         f"M{coords[0][0]:.1f},{height - pad_bottom:.1f} "
         + " ".join(f"L{x:.1f},{y:.1f}" for x, y in coords)
         + f" L{coords[-1][0]:.1f},{height - pad_bottom:.1f} Z"
+    )
+    grid = "".join(
+        f'<line x1="{pad_x}" x2="{width - pad_x}" y1="{y:.1f}" y2="{y:.1f}" class="chart-grid" />'
+        for y in (pad_top, (pad_top + height - pad_bottom) / 2, height - pad_bottom)
     )
     dots = "".join(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" class="chart-dot" />' for x, y in coords)
     value_labels = "".join(
@@ -1078,38 +1194,13 @@ def _revenue_line_chart_svg(
             <stop offset="100%" class="chart-fade-end" />
           </linearGradient>
         </defs>
+        {grid}
         <path d="{area}" fill="url(#{gradient_id})" stroke="none" />
         <polyline points="{polyline}" class="chart-line" fill="none" />
         {dots}
         {value_labels}
         {year_labels}
       </svg>"""
-
-
-def _stat_cards(verified: dict) -> str:
-    """3 tarjetas grandes con los números que más importan de un vistazo —
-    los mismos que ya están citados en el grid de abajo, solo con más
-    jerarquía visual (estilo tablero)."""
-    keys = (("revenue", "Ingresos"), ("ebitda", "EBITDA (derivado)"), ("net_income", "Utilidad neta"))
-    cards = []
-    for key, label in keys:
-        cv = verified.get(key)
-        if cv is None:
-            continue
-        icon = _CONCEPT_ICONS.get(key, "🔎")
-        cards.append(
-            f"""
-      <div class="stat-card reveal">
-        <span class="stat-icon" aria-hidden="true">{icon}</span>
-        <div>
-          <p class="stat-label">{_esc(label)}</p>
-          <p class="stat-value"{_count_attr(cv.value)}>{_esc(_fmt_money(cv.value))}</p>
-        </div>
-      </div>"""
-        )
-    if not cards:
-        return ""
-    return f'<div class="stat-row">{"".join(cards)}</div>'
 
 
 def _badge(cv: CitedValue) -> str:
@@ -1128,140 +1219,217 @@ def _count_attr(value: float | None, suffix: str = "") -> str:
     return f' data-count="{value!r}"{suffix_attr}'
 
 
-def _figure_card(index: int, key: str, label: str, cv: CitedValue) -> str:
-    icon = _CONCEPT_ICONS.get(key, "🔎")
-    if cv.no_verificado:
-        detail = _esc(cv.nota) or "Sin fuente suficiente; no se usó en ningún cálculo."
-    elif cv.derivado:
-        detail = _esc(cv.nota) or "Calculado a partir de otras cifras de esta misma tabla."
-    else:
-        detail = (
-            f"{_esc(cv.citation.doc_id)} · {_esc(cv.citation.seccion)}"
-            f"<blockquote>{_esc(cv.citation.frase_exacta)}</blockquote>"
-        )
-    delay = min(index, 6) * 60
+def _sidebar() -> str:
+    items = (
+        ("reporte", "📊", "Reporte"),
+        ("simulacion", "🎲", "Simular"),
+        ("diario", "📓", "Diario"),
+        ("como-funciona", "🔬", "Verificar"),
+    )
+    links = "".join(
+        f'<a class="nav-btn{" is-active" if i == 0 else ""}" href="#{key}" data-view="{key}">'
+        f'<span class="ico" aria-hidden="true">{icon}</span>{_esc(label)}</a>'
+        for i, (key, icon, label) in enumerate(items)
+    )
     return f"""
-      <article class="card reveal" style="transition-delay:{delay}ms" data-key="{_esc(key)}" data-figure-label="{_esc(label)}">
-        <header class="card-head">
-          <span class="card-icon" aria-hidden="true">{icon}</span>
-          <h3>{_esc(label)}</h3>
-          {_badge(cv)}
-        </header>
-        <p class="card-value"{_count_attr(cv.value)}>{_esc(_fmt_money(cv.value))}</p>
-        <details class="card-detail">
-          <summary>Ver fuente</summary>
-          <div>{detail}</div>
-        </details>
-      </article>"""
+    <aside class="sidebar">
+      <div class="logo" aria-hidden="true">Q</div>
+      <nav aria-label="Secciones" style="display:contents">{links}</nav>
+    </aside>"""
 
 
-def _site_header() -> str:
+def _topbar(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime) -> str:
+    return f"""
+      <div class="topbar">
+        <span class="pill"><strong>Quant Lab</strong></span>
+        <span class="pill">{_esc(empresa_ejemplo)}</span>
+        <span class="pill">{_esc(filing_doc_id)}</span>
+        <span class="grow"></span>
+        <span class="pill">generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</span>
+        <span class="pill">Solo investigación</span>
+      </div>
+      <p class="strip">Análisis informativo, no es asesoría financiera. Nunca dice "compra" ni "vende": la decisión es tuya.</p>"""
+
+
+def _hero() -> str:
     return """
-  <header class="site-header">
-    <div class="wrap">
-      <span class="brand">Quant <span>Lab</span></span>
-      <nav class="nav" aria-label="Secciones">
-        <a href="#reporte">1 · Reporte</a>
-        <a href="#simulacion">2 · Simulación</a>
-        <a href="#diario">3 · Diario</a>
-        <a href="#como-funciona">Cómo se verifica</a>
-      </nav>
-      <span class="pill">Solo investigación</span>
-    </div>
-  </header>
-  <div class="strip"><div class="wrap">Análisis informativo, no es asesoría financiera. Nunca dice "compra" ni "vende": la decisión es tuya.</div></div>"""
-
-
-def _hero(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime) -> str:
-    return f"""
-  <section class="hero wrap">
-    <h1>Qué dice el reporte, y qué podría pasar.</h1>
-    <p>Dos capas separadas a propósito: arriba, hechos con cita del documento oficial; abajo, escenarios
-    simulados que no son predicciones. Nunca se mezclan.</p>
-    <div class="chips">
-      <span class="pill">{_esc(empresa_ejemplo)}</span>
-      <span class="pill">{_esc(filing_doc_id)}</span>
-      <span class="pill">generado {_esc(generated_at.strftime('%Y-%m-%d %H:%M UTC'))}</span>
-    </div>
-  </section>"""
+      <h1 class="page-title">Qué dice el reporte, y qué podría pasar.</h1>
+      <p class="page-sub">Dos capas separadas a propósito: hechos con cita del documento oficial, y escenarios
+      simulados que no son predicciones. Nunca se mezclan.</p>"""
 
 
 def _frontier() -> str:
     return """
-    <div class="frontier" role="separator">
-      ▲ <strong>HECHOS CON CITA</strong> &nbsp;·&nbsp; frontera: nada simulado cruza hacia arriba &nbsp;·&nbsp; <strong>ESCENARIOS SIMULADOS</strong> ▼
-    </div>"""
+      <div class="frontier" role="separator">
+        ▲ <strong>HECHOS CON CITA</strong> &nbsp;·&nbsp; frontera: nada simulado cruza hacia arriba &nbsp;·&nbsp; <strong>ESCENARIOS SIMULADOS</strong> ▼
+      </div>"""
+
+
+def _overview(verified: dict, cagr: CagrResult, chart: str) -> str:
+    revenue = verified.get("revenue")
+    rev_text = _fmt_money(revenue.value) if revenue is not None else "no verificado"
+    rev_attr = _count_attr(revenue.value) if revenue is not None else ""
+    cagr_pct = cagr.value * 100 if cagr.value is not None else None
+    cagr_text = f"{cagr.value:+.2%}" if cagr.value is not None else "no verificado"
+    chart_card = (
+        f"""
+        <div class="card span-7 reveal">
+          <h2>📈 Ingresos por año</h2>
+          <p class="card-sub">Mismos valores citados en la tabla de abajo; no se suavizan ni se inventan puntos.</p>
+          {chart}
+        </div>"""
+        if chart
+        else ""
+    )
+    span = "span-5" if chart else "span-12"
+    return f"""
+        <div class="card {span} reveal">
+          <p class="label">Ingresos (periodo más reciente)</p>
+          <p class="big"{rev_attr}>{_esc(rev_text)}</p>
+          <div class="glow-card">
+            <p class="label" style="color:#CFD4FF">Crecimiento de ingresos (CAGR)</p>
+            <p class="big"{_count_attr(cagr_pct, suffix="%")}>{_esc(cagr_text)}</p>
+            <p style="color:#CFD4FF;font-size:.85rem">{_esc(cagr.nota)}</p>
+          </div>
+        </div>{chart_card}"""
+
+
+def _facts_table(verified: dict) -> str:
+    rows = []
+    for key, label in _DISPLAY_ORDER:
+        cv = verified[key]
+        icon = _CONCEPT_ICONS.get(key, "🔎")
+        if cv.no_verificado:
+            detail = _esc(cv.nota) or "Sin fuente suficiente; no se usó en ningún cálculo."
+        elif cv.derivado:
+            detail = _esc(cv.nota) or "Calculado a partir de otras cifras de esta misma tabla."
+        else:
+            detail = (
+                f"{_esc(cv.citation.doc_id)} · {_esc(cv.citation.seccion)}"
+                f"<blockquote>{_esc(cv.citation.frase_exacta)}</blockquote>"
+            )
+        rows.append(
+            f"""
+          <tr data-key="{_esc(key)}" data-figure-label="{_esc(label)}">
+            <td><span class="fact-name"><span class="avatar" aria-hidden="true">{icon}</span>{_esc(label)}</span></td>
+            <td class="num">{_esc(_fmt_money(cv.value))}</td>
+            <td>{_badge(cv)}</td>
+            <td><details class="card-detail"><summary>Ver fuente</summary><div>{detail}</div></details></td>
+          </tr>"""
+        )
+    return f"""
+        <div class="card span-12 reveal">
+          <h2>📊 Cifras con fuente</h2>
+          <p class="card-sub">Cada fila dice si la cifra está citada, es derivada de otras, o no se pudo verificar.</p>
+          <div class="table-wrap">
+            <table class="facts">
+              <thead><tr><th>Concepto</th><th>Valor</th><th>Estado</th><th>Fuente</th></tr></thead>
+              <tbody>{''.join(rows)}</tbody>
+            </table>
+          </div>
+        </div>"""
+
+
+def _fcf_and_changes(fcf: FcfResult, resumen_cambios: str | None) -> str:
+    changes = (
+        f"""
+        <div class="card span-6 reveal" aria-labelledby="cambios-title">
+          <h2 id="cambios-title">📝 Resumen de cambios</h2>
+          <div class="cambios-body">{_esc(resumen_cambios)}</div>
+        </div>"""
+        if resumen_cambios
+        else ""
+    )
+    span = "span-6" if resumen_cambios else "span-12"
+    return f"""
+        <div class="card {span} reveal">
+          <h2>🧮 Flujo de caja libre (FCF)</h2>
+          <p class="big"{_count_attr(fcf.value)}>{_esc(_fmt_money(fcf.value))}</p>
+          <p class="card-sub">{_esc(fcf.nota)}</p>
+        </div>{changes}"""
 
 
 def _mc_section() -> str:
     return """
-    <section class="layer layer-b" id="simulacion" aria-labelledby="mc-title">
-      <span class="layer-tag">CAPA B · SIMULADO · SIN VALIDAR</span>
-      <h2 id="mc-title">Simulación Monte Carlo</h2>
-      <div class="notice-b">
-        <p><strong>Esto es una simulación, no un hecho ni una predicción.</strong> Aquí no hay citas del documento:
-        los resultados salen de los supuestos que ves abajo. Las probabilidades no están validadas con un
-        backtest, así que no las uses para decidir por sí solas.</p>
-      </div>
-      <div class="mc-controls">
-        <div class="field wide">
-          <label for="mc-source">Origen de μ y σ</label>
-          <select id="mc-source"><option value="">Supuestos manuales (no verificados)</option></select>
+      <section class="layer layer-b" id="simulacion" aria-labelledby="mc-title">
+        <div class="bento">
+          <div class="card span-12">
+            <span class="layer-tag">CAPA B · SIMULADO · SIN VALIDAR</span>
+            <div class="head-row">
+              <h2 id="mc-title">Simulación Monte Carlo</h2>
+              <div class="pills" id="mc-horizon" role="group" aria-label="Horizonte">
+                <button type="button" data-days="30">1 mes</button>
+                <button type="button" data-days="90" class="is-on">3 meses</button>
+                <button type="button" data-days="252">1 año</button>
+              </div>
+            </div>
+            <div class="notice-b">
+              <p><strong>Esto es una simulación, no un hecho ni una predicción.</strong> Aquí no hay citas del documento:
+              los resultados salen de los supuestos que ves abajo. Las probabilidades no están validadas con un
+              backtest, así que no las uses para decidir por sí solas.</p>
+            </div>
+            <div class="mc-controls" style="margin-top:14px">
+              <div class="field wide">
+                <label for="mc-source">Origen de μ y σ</label>
+                <select id="mc-source"><option value="">Supuestos manuales (no verificados)</option></select>
+              </div>
+              <div class="field"><label for="mc-s0">Precio inicial (US$)</label><input id="mc-s0" type="number" step="any" min="0" value="100"></div>
+              <div class="field"><label for="mc-mu">μ, retorno anual (%)</label><input id="mc-mu" type="number" step="any" value="8"></div>
+              <div class="field"><label for="mc-sigma">σ, volatilidad anual (%)</label><input id="mc-sigma" type="number" step="any" min="0" value="25"></div>
+              <div class="field"><label for="mc-days">Días de mercado</label><input id="mc-days" type="number" step="1" min="1" max="756" value="90"></div>
+              <div class="field"><label for="mc-paths">Simulaciones</label><input id="mc-paths" type="number" step="100" min="100" max="5000" value="2000"></div>
+              <div class="field"><label for="mc-capital">Capital simulado (US$)</label><input id="mc-capital" type="number" step="any" min="0" value="1000"></div>
+              <div class="field"><label for="mc-seed">Semilla (reproducible)</label><input id="mc-seed" type="number" step="1" value="42"></div>
+              <div class="field"><label>&nbsp;</label><button type="button" id="mc-run" class="btn">Simular</button></div>
+            </div>
+            <p id="mc-meta" class="mc-meta"></p>
+            <p id="mc-error" class="mc-error" role="alert"></p>
+          </div>
+          <div class="span-12" id="mc-results" aria-live="polite"></div>
+          <div class="card span-12 limits">
+            <strong>Límites de este modelo</strong>
+            <ul>
+              <li>Supone que el futuro se parece al pasado reciente; los mercados cambian de régimen.</li>
+              <li>Retornos con forma de campana: subestima caídas extremas (colas gordas, saltos, gaps).</li>
+              <li>No incluye comisiones, impuestos, dividendos ni noticias del reporte.</li>
+              <li>Mismo conjunto de supuestos + misma semilla = mismo resultado; otra semilla cambia los números.</li>
+            </ul>
+          </div>
         </div>
-        <div class="field"><label for="mc-s0">Precio inicial (US$)</label><input id="mc-s0" type="number" step="any" min="0" value="100"></div>
-        <div class="field"><label for="mc-mu">μ, retorno anual (%)</label><input id="mc-mu" type="number" step="any" value="8"></div>
-        <div class="field"><label for="mc-sigma">σ, volatilidad anual (%)</label><input id="mc-sigma" type="number" step="any" min="0" value="25"></div>
-        <div class="field"><label for="mc-days">Días de mercado</label><input id="mc-days" type="number" step="1" min="1" max="756" value="90"></div>
-        <div class="field"><label for="mc-paths">Simulaciones</label><input id="mc-paths" type="number" step="100" min="100" max="5000" value="2000"></div>
-        <div class="field"><label for="mc-capital">Capital simulado (US$)</label><input id="mc-capital" type="number" step="any" min="0" value="1000"></div>
-        <div class="field"><label for="mc-seed">Semilla (reproducible)</label><input id="mc-seed" type="number" step="1" value="42"></div>
-        <div class="field"><label>&nbsp;</label><button type="button" id="mc-run" class="btn">Simular</button></div>
-      </div>
-      <p id="mc-meta" class="mc-meta"></p>
-      <p id="mc-error" class="mc-error" role="alert"></p>
-      <div id="mc-results" aria-live="polite"></div>
-      <div class="limits">
-        <strong>Límites de este modelo</strong>
-        <ul>
-          <li>Supone que el futuro se parece al pasado reciente; los mercados cambian de régimen.</li>
-          <li>Retornos con forma de campana: subestima caídas extremas (colas gordas, saltos, gaps).</li>
-          <li>No incluye comisiones, impuestos, dividendos ni noticias del reporte.</li>
-          <li>Mismo conjunto de supuestos + misma semilla = mismo resultado; otra semilla cambia los números.</li>
-        </ul>
-      </div>
-    </section>"""
+      </section>"""
 
 
 def _diary_section() -> str:
     return """
-    <section class="layer" id="diario" aria-labelledby="diary-title">
-      <div class="diary">
-        <h2 id="diary-title">Diario de decisiones</h2>
-        <p class="section-intro">Anota qué hecho verificado y qué escenario simulado miraste, y por qué.
-        Quedan en campos separados. Esta página no guarda nada: copia el texto o descárgalo.</p>
-        <div class="grid2">
-          <div><label for="diary-fact">Hecho verificado (Capa A)</label>
-            <select id="diary-fact"><option value="">— ninguno —</option></select></div>
-          <div><label for="diary-scenario">Escenario simulado (Capa B)</label>
-            <select id="diary-scenario"><option value="">— ninguno (corre una simulación primero) —</option></select></div>
+      <section class="layer" id="diario" aria-labelledby="diary-title">
+        <div class="card diary">
+          <h2 id="diary-title">📓 Diario de decisiones</h2>
+          <p class="section-intro">Anota qué hecho verificado y qué escenario simulado miraste, y por qué.
+          Quedan en campos separados. Esta página no guarda nada: copia el texto o descárgalo.</p>
+          <div class="grid2">
+            <div><label for="diary-fact">Hecho verificado (Capa A)</label>
+              <select id="diary-fact"><option value="">— ninguno —</option></select></div>
+            <div><label for="diary-scenario">Escenario simulado (Capa B)</label>
+              <select id="diary-scenario"><option value="">— ninguno (corre una simulación primero) —</option></select></div>
+          </div>
+          <fieldset>
+            <legend>Mi postura (tuya, no del sistema)</legend>
+            <label><input type="radio" name="diary-posture" value="Seguir investigando" checked> Seguir investigando</label>
+            <label><input type="radio" name="diary-posture" value="Esperar más información"> Esperar más información</label>
+            <label><input type="radio" name="diary-posture" value="Descartar por ahora"> Descartar por ahora</label>
+          </fieldset>
+          <label for="diary-note">Mi razonamiento (incluye qué argumento en contra consideraste)</label>
+          <textarea id="diary-note" maxlength="1000" placeholder="¿Qué me convenció? ¿Qué me haría cambiar de opinión?"></textarea>
+          <label for="diary-preview" style="display:block;margin-top:14px">Vista previa (Markdown)</label>
+          <textarea id="diary-preview" class="preview" readonly></textarea>
+          <div class="actions">
+            <button type="button" id="diary-copy" class="btn">Copiar</button>
+            <button type="button" id="diary-download" class="btn btn-ghost">Descargar .md</button>
+          </div>
+          <p id="diary-status" class="hint" role="status"></p>
         </div>
-        <fieldset>
-          <legend>Mi postura (tuya, no del sistema)</legend>
-          <label><input type="radio" name="diary-posture" value="Seguir investigando" checked> Seguir investigando</label>
-          <label><input type="radio" name="diary-posture" value="Esperar más información"> Esperar más información</label>
-          <label><input type="radio" name="diary-posture" value="Descartar por ahora"> Descartar por ahora</label>
-        </fieldset>
-        <label for="diary-note">Mi razonamiento (incluye qué argumento en contra consideraste)</label>
-        <textarea id="diary-note" maxlength="1000" placeholder="¿Qué me convenció? ¿Qué me haría cambiar de opinión?"></textarea>
-        <label for="diary-preview" style="display:block;margin-top:14px">Vista previa (Markdown)</label>
-        <textarea id="diary-preview" class="preview" readonly></textarea>
-        <div class="actions">
-          <button type="button" id="diary-copy" class="btn">Copiar</button>
-          <button type="button" id="diary-download" class="btn btn-ghost">Descargar .md</button>
-        </div>
-        <p id="diary-status" class="hint" role="status"></p>
-      </div>
-    </section>"""
+      </section>"""
+
 
 
 def _pipeline_section() -> str:
@@ -1279,7 +1447,7 @@ def _pipeline_section() -> str:
         {arrow}"""
         )
     return f"""
-    <section class="pipeline" id="como-funciona" aria-labelledby="pipeline-title">
+    <section class="card pipeline" id="como-funciona" aria-labelledby="pipeline-title">
       <h2 id="pipeline-title">🔬 Cómo se verifica cada cifra</h2>
       <p class="section-intro">Cinco pasos, en este orden a propósito, antes de que algo llegue a esta
       página:</p>
@@ -1303,7 +1471,7 @@ def _risk_banner(verified: dict, fcf: FcfResult) -> str:
         else "<p>Todas las cifras de este reporte tienen una cita verificada contra el documento original.</p>"
     )
     return f"""
-    <section class="risk reveal" aria-labelledby="risk-title">
+    <section class="risk span-12 reveal" aria-labelledby="risk-title">
       <h2 id="risk-title">⚠️ Riesgo y limitaciones (léase primero)</h2>
       {cuerpo}
       {fcf_line}
@@ -1312,30 +1480,12 @@ def _risk_banner(verified: dict, fcf: FcfResult) -> str:
     </section>"""
 
 
-def _calc_cards(fcf: FcfResult, cagr: CagrResult) -> str:
-    cagr_text = f"{cagr.value:+.2%}" if cagr.value is not None else "no verificado"
-    cagr_pct = cagr.value * 100 if cagr.value is not None else None
-    return f"""
-    <section class="calc-grid" aria-label="Cálculos">
-      <article class="card reveal">
-        <header class="card-head"><span class="card-icon" aria-hidden="true">🧮</span><h3>FCF</h3></header>
-        <p class="card-value"{_count_attr(fcf.value)}>{_esc(_fmt_money(fcf.value))}</p>
-        <p class="card-note">{_esc(fcf.nota)}</p>
-      </article>
-      <article class="card reveal">
-        <header class="card-head"><span class="card-icon" aria-hidden="true">📈</span><h3>CAGR de ingresos</h3></header>
-        <p class="card-value"{_count_attr(cagr_pct, suffix="%")}>{_esc(cagr_text)}</p>
-        <p class="card-note">{_esc(cagr.nota)}</p>
-      </article>
-    </section>"""
-
-
 def _try_it_section(companies: dict | None) -> str:
     if not companies:
         return ""
     companies_json = _json.dumps(companies, ensure_ascii=False, separators=(",", ":"))
     return f"""
-    <section class="try-it reveal" aria-labelledby="try-it-title">
+    <section class="card span-12 try-it reveal" aria-labelledby="try-it-title">
       <p class="try-it-warning">
         <strong>⚠️ Esto es una prueba (experimental).</strong> La lectura de "barata" o "cara" es
         automática y simple (P/E y FCF yield con dos umbrales fijos) — no es la metodología
@@ -1371,30 +1521,14 @@ def build_html_report(
     companies: dict | None = None,
 ) -> str:
     generated_at = generated_at or datetime.now(timezone.utc)
-    cards = "".join(
-        _figure_card(i, key, label, verified[key]) for i, (key, label) in enumerate(_DISPLAY_ORDER)
-    )
-    stat_cards = _stat_cards(verified)
     revenue_series_points = [
         {"period_end": cv.period_end, "value": cv.value}
         for cv in (verified.get("revenue_series") or [])
         if cv.value is not None
     ]
     revenue_chart = _revenue_line_chart_svg(revenue_series_points)
-    chart_card = (
-        f'<div class="card chart-card reveal"><h3>📈 Ingresos por año (mismo documento citado arriba)</h3>{revenue_chart}</div>'
-        if revenue_chart
-        else ""
-    )
-    cambios_section = (
-        f"""
-    <section class="card reveal" aria-labelledby="cambios-title">
-      <h2 id="cambios-title">📝 Resumen de cambios</h2>
-      <div class="cambios-body">{_esc(resumen_cambios)}</div>
-    </section>"""
-        if resumen_cambios
-        else ""
-    )
+    overview = _overview(verified, cagr, revenue_chart)
+    facts_table = _facts_table(verified)
 
     return f"""<!doctype html>
 <html lang="es">
@@ -1408,39 +1542,42 @@ def build_html_report(
 </head>
 <body>
   <div id="scroll-progress"></div>
-  {_site_header()}
-  {_hero(empresa_ejemplo, filing_doc_id, generated_at)}
-  <main class="wrap">
-    <section class="layer layer-a" id="reporte">
-      <span class="layer-tag">CAPA A · HECHOS VERIFICADOS</span>
-      {_risk_banner(verified, fcf)}
-      <h2>📊 Cifras con fuente</h2>
-      <p class="section-intro">Cada tarjeta dice si la cifra está citada, es derivada de otras, o no se pudo verificar.</p>
-      {stat_cards}
-      {chart_card}
-      <div class="grid">{cards}
+  <div class="app">
+    {_sidebar()}
+    <div class="main">
+      {_topbar(empresa_ejemplo, filing_doc_id, generated_at)}
+      {_hero()}
+      <div class="view is-active" data-view="reporte">
+        <section class="layer layer-a" id="reporte">
+          <span class="layer-tag">CAPA A · HECHOS VERIFICADOS</span>
+          <div class="bento">
+            {_risk_banner(verified, fcf)}
+            {overview}
+            {facts_table}
+            {_fcf_and_changes(fcf, resumen_cambios)}
+            {_try_it_section(companies)}
+          </div>
+        </section>
       </div>
-      <h2>🧮 Cálculos</h2>
-      {_calc_cards(fcf, cagr)}
-      {cambios_section}
-      {_try_it_section(companies)}
-    </section>
-    {_frontier()}
-    {_mc_section()}
-    {_diary_section()}
-    <section class="layer" aria-label="Cómo se verifica">
-      {_pipeline_section()}
-    </section>
-  </main>
-  <footer>
-    <div class="wrap">
-      <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
-      <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
-      <p class="footer-link">
-        <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Código fuente ↗</a>
-      </p>
+      <div class="view" data-view="simulacion">
+        {_frontier()}
+        {_mc_section()}
+      </div>
+      <div class="view" data-view="diario">
+        {_diary_section()}
+      </div>
+      <div class="view" data-view="como-funciona">
+        {_pipeline_section()}
+      </div>
+      <footer>
+        <p><strong>{_esc(DISCLAIMER.replace('**', ''))}</strong></p>
+        <p>Herramienta de investigación, no es asesoría financiera. No sugiere comprar ni vender.</p>
+        <p class="footer-link">
+          <a href="{_REPO_URL}" target="_blank" rel="noopener noreferrer">Código fuente ↗</a>
+        </p>
+      </footer>
     </div>
-  </footer>
+  </div>
   <script>{_SCRIPT}</script>
 </body>
 </html>
