@@ -6,8 +6,7 @@ third-party font host.
 
 | File | Font | Copyright |
 | --- | --- | --- |
-| `manrope-var.woff2` | Manrope (variable, latin) | 2019 The Manrope Project Authors |
-| `instrument-serif.woff2`, `instrument-serif-italic.woff2` | Instrument Serif (latin) | 2022 The Instrument Serif Project Authors |
+| `inter-var.woff2` | Inter (variable, latin) | 2020 The Inter Project Authors |
 | `ibm-plex-mono-500.woff2` | IBM Plex Mono Medium (latin) | 2017 IBM Corp. |
 
 Source of the files: the `@fontsource` npm packages (OFL-1.1).

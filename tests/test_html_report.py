@@ -442,8 +442,8 @@ console.log(JSON.stringify({ flat: flat.p50, flatSpread: flat.p95 - flat.p5, noi
 
 def test_fonts_are_embedded_as_data_uris_and_csp_allows_only_data_fonts():
     html = _plain_html()
-    assert html.count("src: url(data:font/woff2;base64,") == 4
-    for family in ("Manrope", "Instrument Serif", "IBM Plex Mono"):
+    assert html.count("src: url(data:font/woff2;base64,") == 2
+    for family in ("Inter", "IBM Plex Mono"):
         assert f'font-family: "{family}"' in html
     csp = re.search(r'Content-Security-Policy" content="([^"]+)"', html).group(1)
     assert "font-src data:" in csp
