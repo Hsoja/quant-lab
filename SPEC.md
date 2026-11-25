@@ -319,6 +319,9 @@ El enlace al código fuente se movió al pie de página, sin la sección alreded
   verificado". Las probabilidades no están validadas con backtest y la página lo dice.
 - 2026-11-18 — v1.8. Sección 12: diseño v3 (fondo animado, tipografías propias, widgets de
   TradingView que sí cargan y asistente flotante). Mismo contenido y mismas reglas; ver abajo.
+- 2026-11-24 — v1.9. Sección 13: diseño v4 (claro/limpio, a pedido explícito: se abandona el
+  tema oscuro con brillos por blanco + azul muy claro, acento único azul, sin degradados ni
+  glassmorphism oscuro). Mismo contenido y mismas reglas; ver abajo.
 
 ## 12. Diseño v3 (2026-11-18)
 
@@ -353,3 +356,33 @@ separación Capa A / Capa B no se tocan.
   `<meta>` (GitHub Pages no permite cabeceras propias, así que esa protección no es posible aquí).
 - **Publicación.** La página en vivo se sirve desde la rama `gh-pages` (`index.html`). Hay que
   copiarle `examples/reporte_ejemplo.html` después de regenerarlo.
+
+## 13. Diseño v4 (2026-11-24)
+
+Pedido explícito: abandonar el tema oscuro (se parecía a otro proyecto de Katherine) por un
+estilo claro, limpio, "mucho aire" (referencia: dashboard de Creator Economy). Solo cambia la
+presentación; las reglas 1-5, la separación Capa A / Capa B y el flujo no se tocan.
+
+- **Paleta.** `report/assets/style.css`. Fondo blanco con un tinte azul muy claro (`#EFF6FF`)
+  arriba; tarjetas blancas, borde fino `#E2E8F0`, radio 18px, sombra suave difuminada (sin brillo
+  ni glassmorphism oscuro). Texto principal azul marino `#0F172A`, secundario gris azulado
+  `#64748B`. Acento único azul `#2563EB` para botones, links y cifras importantes; verde `#16A34A`
+  / rojo `#DC2626` reservados para estados de "bien"/"riesgo" (p. ej. barras de ganancia/pérdida
+  del histograma Monte Carlo). Botones en forma de píldora, sólidos (sin degradado).
+- **Fondo decorativo apagado.** Los tres orbes degradados, la cuadrícula de fondo y la
+  constelación de partículas en `<canvas>` del diseño v3 se desactivan por CSS (`display:none`):
+  seguían el pedido explícito de "nada que parpadee, nada que distraiga". El código del canvas
+  queda sin uso visible; se borra en una limpieza posterior si no vuelve a necesitarse.
+- **Tipografías.** Inter (variable, texto y títulos) e IBM Plex Mono (cifras), ambas OFL, en
+  `report/assets/fonts/` y embebidas como `data:` URI igual que antes — sigue siendo un solo
+  archivo. Se quita Instrument Serif: el título del hero ya no usa cursiva decorativa.
+- **TradingView.** Los widgets (cinta de precios, gráfica, rangos, noticias) pasan de
+  `theme/colorTheme: "dark"` a `"light"` para no desentonar con la página.
+- **Movimiento.** Igual que v3 pero sobre fondo claro: ticker lento, contadores que suben al
+  cargar, tarjetas que suben 4px al pasar el mouse, gráficas que se dibujan al entrar en pantalla,
+  asistente flotante con escritura progresiva. Se quita el brillo/sombra tipo neón de la línea de
+  ingresos y del borde "frontera" animado.
+- **Refactor pequeño.** `report/page_kit.py` (nuevo): se movieron `_font_css`/`_sha256_b64` desde
+  `report/html_report.py` a este módulo compartido, para que los próximos demos autocontenidos
+  (Monte Carlo de opciones, optimización de portafolio, red neuronal) no dupliquen esa lógica.
+  Sin cambio de comportamiento.

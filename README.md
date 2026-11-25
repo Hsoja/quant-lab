@@ -52,9 +52,9 @@ text, only the JSON of already-verified figures (see `docs/SECURITY.md`).
 
 ## The web page
 
-`report/html_report.py` generates a single self-contained HTML file (dark, animated violet/mint
-glow background, Manrope + Instrument Serif + IBM Plex Mono embedded as `data:` fonts — see
-`report/assets/`) from the same data as the Markdown report. It's static on purpose: no backend,
+`report/html_report.py` generates a single self-contained HTML file (light/clean design: white
+and light-blue surfaces, a single blue accent, Inter + IBM Plex Mono embedded as `data:` fonts —
+see `report/assets/`) from the same data as the Markdown report. It's static on purpose: no backend,
 no forms, no `localStorage`, no external scripts or font hosts. All dynamic text goes through `html.escape` before
 being inserted, and it ships a strict Content-Security-Policy (`default-src 'none'`; the inline
 `<script>` is allowed by a SHA-256 hash of its exact content, not `'unsafe-inline'`). Reveal

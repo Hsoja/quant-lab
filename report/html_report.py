@@ -1,9 +1,9 @@
 """Página web del reporte (adicional, fuera del alcance original del MVP,
 ver SPEC.md sección 3). Es un único archivo HTML autocontenido y estático:
 no hay backend, no hay formularios, no se guarda nada en el navegador.
-Diseño v3 (Capa A hechos verificados · Capa B simulación · Diario), oscuro con fondo animado
-(brillos violeta/menta, a pedido explícito de un look de tablero más vistoso), con tipografías
-embebidas (Manrope, Instrument Serif, IBM Plex Mono), widgets de TradingView en iframes
+Diseño v4 (Capa A hechos verificados · Capa B simulación · Diario), claro y limpio (blanco y
+azul muy claro, acento único azul, sin brillos ni degradados neón — ver report/assets/style.css),
+con tipografías embebidas (Inter, IBM Plex Mono), widgets de TradingView en iframes
 aislados, un asistente flotante de respuestas preparadas, animada, y pensada para explicar el sistema de
 verificación (no solo mostrar números) — así alguien que nunca vio el
 proyecto entiende, en un scroll, por qué puede confiar en lo que lee.
@@ -30,8 +30,6 @@ Reglas de seguridad (skill frontend-seguro) aplicadas:
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import html as _html
 import json as _json
 from datetime import datetime, timezone
@@ -39,6 +37,7 @@ from pathlib import Path
 
 from calc.fcf import CagrResult, FcfResult
 from extract.facts import CitedValue
+from report import page_kit
 from report.report import DISCLAIMER, _DISPLAY_ORDER
 
 _REPO_URL = "https://github.com/Hsoja/quant-lab"
@@ -48,22 +47,10 @@ _ASSETS = Path(__file__).resolve().parent / "assets"
 # Tipografías embebidas como data: URI (licencia OFL, ver assets/fonts/LICENSES.md):
 # la página sigue siendo un solo archivo y no carga nada de ningún host de fuentes.
 _FONT_FACES = (
-    ("Manrope", "normal", "200 800", "manrope-var.woff2"),
-    ("Instrument Serif", "normal", "400", "instrument-serif.woff2"),
-    ("Instrument Serif", "italic", "400", "instrument-serif-italic.woff2"),
+    ("Inter", "normal", "100 900", "inter-var.woff2"),
     ("IBM Plex Mono", "normal", "500", "ibm-plex-mono-500.woff2"),
 )
 
-
-def _font_css() -> str:
-    rules = []
-    for family, style, weight, filename in _FONT_FACES:
-        data = base64.b64encode((_ASSETS / "fonts" / filename).read_bytes()).decode("ascii")
-        rules.append(
-            f'@font-face {{ font-family: "{family}"; font-style: {style}; font-weight: {weight}; '
-            f"font-display: swap; src: url(data:font/woff2;base64,{data}) format(\"woff2\"); }}"
-        )
-    return "\n".join(rules)
 
 # El único <script> de la página, como texto plano (sin f-string: así sus
 # propias llaves de JS no necesitan escaparse por duplicado). Como la página
@@ -239,9 +226,9 @@ _SCRIPT = """(function () {
         "Gráfica interactiva",
         tvFrame("advanced-chart", {
           autosize: true, symbol: symbol, interval: "D", timezone: "America/Toronto",
-          theme: "dark", style: "1", locale: "es", allow_symbol_change: false,
+          theme: "light", style: "1", locale: "es", allow_symbol_change: false,
           hide_side_toolbar: true, withdateranges: true, save_image: false,
-          backgroundColor: "rgba(13, 15, 30, 0)", gridColor: "rgba(148, 160, 255, 0.06)",
+          backgroundColor: "rgba(255, 255, 255, 0)", gridColor: "rgba(15, 23, 42, 0.06)",
           support_host: "https://www.tradingview-widget.com"
         }, "Gráfica interactiva de " + ticker, "live-frame-main"),
         "live-wide"
@@ -250,20 +237,20 @@ _SCRIPT = """(function () {
         "Rangos de precio",
         tvFrame("symbol-overview", {
           symbols: [[ticker, symbol + "|1D"]], chartOnly: false, width: "100%", height: "100%",
-          locale: "es", colorTheme: "dark", autosize: true, showVolume: false, showMA: false,
+          locale: "es", colorTheme: "light", autosize: true, showVolume: false, showMA: false,
           hideDateRanges: false, hideMarketStatus: false, hideSymbolLogo: false,
           scalePosition: "right", scaleMode: "Normal", fontSize: "10", noTimeScale: false,
           valuesTracking: "1", changeMode: "price-and-percent", chartType: "area",
           lineWidth: 2, lineType: 0, isTransparent: true,
-          backgroundColor: "rgba(13, 15, 30, 0)",
-          topColor: "rgba(123, 108, 255, 0.35)", bottomColor: "rgba(123, 108, 255, 0)", lineColor: "#9a8fff"
+          backgroundColor: "rgba(255, 255, 255, 0)",
+          topColor: "rgba(37, 99, 235, 0.25)", bottomColor: "rgba(37, 99, 235, 0)", lineColor: "#2563EB"
         }, "Rangos de precio de " + ticker, "live-frame-chart")
       ));
       wrap.appendChild(liveCard(
         "Noticias de mercado (en inglés)",
         // El feed de noticias de TradingView solo responde con locale=en (con es muestra un error).
         tvFrame("timeline", {
-          width: "100%", height: "100%", colorTheme: "dark", isTransparent: true,
+          width: "100%", height: "100%", colorTheme: "light", isTransparent: true,
           feedMode: "symbol", symbol: symbol, displayMode: "regular"
         }, "Noticias en vivo de " + ticker, "live-frame-news", "en")
       ));
@@ -473,6 +460,7 @@ _SCRIPT = """(function () {
       return c / n;
     }
     var p5 = percentile(values, 0.05);
+    var priceValues = Array.prototype.slice.call(sim.finals).sort(function (a, b) { return a - b; });
     var bands = sim.series.map(function (col) {
       var s = Array.prototype.slice.call(col).map(function (x) { return x * scale; });
       s.sort(function (a, b) { return a - b; });
@@ -496,12 +484,16 @@ _SCRIPT = """(function () {
     }
     return {
       capital: p.capital,
+      s0: p.s0,
       pUp: share(function (v) { return v > p.capital; }),
       pLoss10: share(function (v) { return v < p.capital * 0.9; }),
       pGain20: share(function (v) { return v > p.capital * 1.2; }),
       p5: p5,
       p50: percentile(values, 0.5),
       p95: percentile(values, 0.95),
+      priceP5: percentile(priceValues, 0.05),
+      priceP50: percentile(priceValues, 0.5),
+      priceP95: percentile(priceValues, 0.95),
       var95: Math.max(0, p.capital - p5),
       bands: bands,
       stepIdx: sim.stepIdx,
@@ -684,11 +676,18 @@ _SCRIPT = """(function () {
       riskRow.appendChild(statCard("Prob. de terminar arriba", pctText(s.pUp), "Valor final > capital inicial"));
       riskRow.appendChild(statCard("Prob. de ganar más de 20%", pctText(s.pGain20), "Escenario optimista"));
       resultsEl.appendChild(riskRow);
+      resultsEl.appendChild(el("p", "section-intro", "Tu capital simulado (partiendo de " + usd(s.capital) + "):"));
       var pr = el("div", "mc-stats mc-stats-3");
       pr.appendChild(statCard("P5 (escenario malo)", usd(s.p5), "5% termina por debajo"));
       pr.appendChild(statCard("P50 (mediana)", usd(s.p50), "La mitad termina por debajo"));
       pr.appendChild(statCard("P95 (escenario bueno)", usd(s.p95), "5% termina por encima"));
       resultsEl.appendChild(pr);
+      resultsEl.appendChild(el("p", "section-intro", "Precio por acción simulado (partiendo de " + usd(s.s0) + "): cambia si cambias el precio inicial, aunque tu capital sea el mismo."));
+      var pricePr = el("div", "mc-stats mc-stats-3");
+      pricePr.appendChild(statCard("P5 (precio, malo)", usd(s.priceP5), "5% termina por debajo"));
+      pricePr.appendChild(statCard("P50 (precio, mediana)", usd(s.priceP50), "La mitad termina por debajo"));
+      pricePr.appendChild(statCard("P95 (precio, bueno)", usd(s.priceP95), "5% termina por encima"));
+      resultsEl.appendChild(pricePr);
       var f1 = el("figure", "mc-figure");
       f1.appendChild(el("figcaption", "", "Trayectorias simuladas (" + p.paths + " en total; se dibujan 25) y bandas P5–P95 / P25–P75"));
       f1.appendChild(fanChart(s, p.days));
@@ -704,6 +703,9 @@ _SCRIPT = """(function () {
       var r = readParams();
       if (r.problems.length) {
         errorEl.textContent = r.problems.join(" ");
+        clear(resultsEl); // nada de resultados viejos en pantalla: si no corrió, no debe parecer que sí
+        lastSummary = null;
+        document.dispatchEvent(new CustomEvent("mc-updated"));
         return;
       }
       errorEl.textContent = "";
@@ -851,7 +853,7 @@ _SCRIPT = """(function () {
         ["BITSTAMP:BTCUSD", "Bitcoin"], ["OANDA:XAUUSD", "Oro"], ["FX:USDCAD", "USD/CAD"]
       ].map(function (p) { return { proName: p[0], title: p[1] }; });
       tape.appendChild(tvFrame("ticker-tape", {
-        width: "100%", height: "100%", colorTheme: "dark", isTransparent: true,
+        width: "100%", height: "100%", colorTheme: "light", isTransparent: true,
         symbols: symbols, showSymbolLogo: true, displayMode: "adaptive"
       }, "Cinta de precios de TradingView", ""));
     }
@@ -882,13 +884,13 @@ _SCRIPT = """(function () {
           p.x += p.vx; p.y += p.vy;
           if (p.x < 0 || p.x > W) p.vx *= -1;
           if (p.y < 0 || p.y > H) p.vy *= -1;
-          ctx.fillStyle = "rgba(154, 143, 255, 0.7)";
+          ctx.fillStyle = "rgba(37, 99, 235, 0.35)";
           ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, 6.2832); ctx.fill();
           for (var b = a + 1; b < dots.length; b++) {
             var q = dots[b];
             var dx = p.x - q.x, dy = p.y - q.y, d2 = dx * dx + dy * dy;
             if (d2 < 19600) {
-              ctx.strokeStyle = "rgba(123, 108, 255, " + (0.22 * (1 - d2 / 19600)).toFixed(3) + ")";
+              ctx.strokeStyle = "rgba(37, 99, 235, " + (0.10 * (1 - d2 / 19600)).toFixed(3) + ")";
               ctx.lineWidth = 1;
               ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
             }
@@ -1126,12 +1128,8 @@ _SCRIPT = """(function () {
 })();"""
 
 
-def _sha256_b64(text: str) -> str:
-    digest = hashlib.sha256(text.encode("utf-8")).digest()
-    return base64.b64encode(digest).decode("ascii")
 
-
-_SCRIPT_HASH = _sha256_b64(_SCRIPT)
+_SCRIPT_HASH = page_kit.sha256_b64(_SCRIPT)
 
 _TRADINGVIEW_ORIGIN = "https://www.tradingview-widget.com"
 
@@ -1146,7 +1144,9 @@ _CSP = (
     "form-action 'none'"
 )
 
-_STYLE = (_ASSETS / "style.css").read_text(encoding="utf-8").replace("/*FONTS*/", _font_css())
+_STYLE = (_ASSETS / "style.css").read_text(encoding="utf-8").replace(
+    "/*FONTS*/", page_kit.font_css(_ASSETS / "fonts", _FONT_FACES)
+)
 
 _CONCEPT_ICONS = {
     "revenue": "💰",
@@ -1372,7 +1372,7 @@ def _site_header() -> str:
   <header class="site-header">
     <div class="wrap">
       <span class="brand">
-        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#06070d" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg></span>
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 8-9"/><path d="M15 5h5v5"/></svg></span>
         Quant <span class="lab">Lab</span>
       </span>
       <nav class="nav" aria-label="Secciones">
@@ -1403,11 +1403,11 @@ def _bot_markup() -> str:
     face = (
         '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none">'
         '<line x1="20" y1="3" x2="20" y2="9" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>'
-        '<circle cx="20" cy="3.2" r="2.2" fill="#2bd9a0"/>'
-        '<rect x="6" y="9" width="28" height="23" rx="9" fill="#0b0820" stroke="#fff" stroke-opacity=".85" stroke-width="2"/>'
-        '<ellipse class="bot-eye" cx="14.5" cy="20" rx="3" ry="3.6" fill="#2bd9a0"/>'
-        '<ellipse class="bot-eye" cx="25.5" cy="20" rx="3" ry="3.6" fill="#2bd9a0"/>'
-        '<path d="M15 27.2q5 3 10 0" stroke="#9a8fff" stroke-width="2" stroke-linecap="round"/></svg>'
+        '<circle cx="20" cy="3.2" r="2.2" fill="#fff"/>'
+        '<rect x="6" y="9" width="28" height="23" rx="9" fill="#1D4ED8" stroke="#fff" stroke-opacity=".85" stroke-width="2"/>'
+        '<ellipse class="bot-eye" cx="14.5" cy="20" rx="3" ry="3.6" fill="#fff"/>'
+        '<ellipse class="bot-eye" cx="25.5" cy="20" rx="3" ry="3.6" fill="#fff"/>'
+        '<path d="M15 27.2q5 3 10 0" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'
     )
     return f"""
   <div class="bot-fab">
@@ -1549,7 +1549,7 @@ def _hero(empresa_ejemplo: str, filing_doc_id: str, generated_at: datetime, veri
   <section class="hero wrap">
     <div>
       <span class="eyebrow"><span class="dot-live" aria-hidden="true"></span>Monitor de reportes con citas verificables</span>
-      <h1>Qué dice el reporte, <em class="serif grad-text">y qué podría pasar.</em></h1>
+      <h1>Qué dice el reporte, <em class="accent-text">y qué podría pasar.</em></h1>
       <p class="lead">Dos capas separadas a propósito: arriba, hechos con cita del documento oficial; abajo,
       escenarios simulados que no son predicciones. Nunca se mezclan.</p>
       <div class="chips">
@@ -1596,6 +1596,7 @@ def _mc_section() -> str:
         backtest, así que no las uses para decidir por sí solas.</p>
       </div>
       <div class="mc-controls">
+        <p class="mc-controls-title field wide">⚙️ Ajusta los supuestos y corre la simulación</p>
         <div class="field wide">
           <label for="mc-source">Origen de μ y σ</label>
           <select id="mc-source"><option value="">Supuestos manuales (no verificados)</option></select>
@@ -1796,7 +1797,7 @@ def build_html_report(
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{_CSP}">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#06070d">
+<meta name="theme-color" content="#FFFFFF">
 <title>{_esc(empresa_ejemplo)} — Reporte Quant Lab</title>
 <style>{_STYLE}</style>
 </head>
